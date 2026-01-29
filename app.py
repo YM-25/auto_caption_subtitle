@@ -11,15 +11,18 @@ app.secret_key = secrets.token_hex(16)
 # Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'data', 'videos')
+AUDIO_FOLDER = os.path.join(BASE_DIR, 'data', 'audios')
 TRANSCRIPT_FOLDER = os.path.join(BASE_DIR, 'data', 'transcripts')
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['AUDIO_FOLDER'] = AUDIO_FOLDER
 app.config['TRANSCRIPT_FOLDER'] = TRANSCRIPT_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB limit
 
 # Ensure directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(AUDIO_FOLDER, exist_ok=True)
 os.makedirs(TRANSCRIPT_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
@@ -103,23 +106,29 @@ def upload_and_process():
 
     return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
 
-@app.route('/download/<filename>')
+@app.route('/download/<path:filename>')
 def download_file(filename):
-    return send_file(os.path.join(app.config['TRANSCRIPT_FOLDER'], filename), as_attachment=True)
+    # Prevent path traversal: ensure resolved path stays inside TRANSCRIPT_FOLDER
+    root = os.path.abspath(app.config['TRANSCRIPT_FOLDER'])
+    path = os.path.abspath(os.path.join(root, filename))
+    if not path.startswith(root) or not os.path.isfile(path):
+        return jsonify({'error': 'File not found'}), 404
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
 @app.route('/clear_history', methods=['POST'])
 def clear_history():
     try:
-        # Clear directories
-        for folder in [app.config['UPLOAD_FOLDER'], app.config['TRANSCRIPT_FOLDER']]:
+        import shutil
+        # Clear directories: videos, extracted audios, transcripts
+        for folder in [app.config['UPLOAD_FOLDER'], app.config['AUDIO_FOLDER'], app.config['TRANSCRIPT_FOLDER']]:
+            if not os.path.isdir(folder):
+                continue
             for filename in os.listdir(folder):
                 file_path = os.path.join(folder, filename)
                 try:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
                         os.unlink(file_path)
                     elif os.path.isdir(file_path):
-                        # Optional: remove subdirs if any
-                        import shutil
                         shutil.rmtree(file_path)
                 except Exception as e:
                     print(f'Failed to delete {file_path}. Reason: {e}')
@@ -128,4 +137,5 @@ def clear_history():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    debug = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
+    app.run(debug=debug, port=5000)

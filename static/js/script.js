@@ -98,8 +98,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Upload failed');
+                const text = await response.text();
+                let message = 'Upload failed';
+                try {
+                    const errorData = JSON.parse(text);
+                    if (errorData && errorData.error) message = errorData.error;
+                } catch (_) {
+                    if (text) message = text.slice(0, 200);
+                }
+                throw new Error(message);
             }
 
             // Read the stream

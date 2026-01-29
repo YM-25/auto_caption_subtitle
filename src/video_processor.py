@@ -15,6 +15,7 @@ def convert_video_to_audio(video_path, audio_output_path):
         (
             ffmpeg
             .input(video_path)
+            .audio
             .output(audio_output_path)
             .overwrite_output()
             .run(quiet=True)
