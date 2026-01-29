@@ -44,31 +44,46 @@
 
 3. **Open your browser** and navigate to: `http://127.0.0.1:5000`
 
+### Optional configuration
+
+Copy `.env.example` to `.env` and set variables as needed:
+
+| Variable | Description |
+|----------|-------------|
+| `FLASK_SECRET_KEY` | Secret key for Flask (recommended in production). |
+| `WHISPER_MODEL` | Whisper model: `tiny`, `base`, `small`, `medium`, `large` (default: `base`). |
+| `CLEANUP_AFTER_PROCESS` | Set to `1` to delete uploaded video and extracted audio after successful processing. |
+| `PORT` | Server port (default: `5000`). |
+| `FLASK_DEBUG` | Set to `1` to enable debug mode. |
+
 ## 🏃 Usage
 
 1. **Upload**: Drag and drop multiple video files onto the upload area.
 2. **Configure**: Set individual **Source** and **Target** languages for each video in the horizontal list.
 3. **Process**: Click **Generate All Subtitles**.
-4. **Download**: Once a video is marked "Done", use the **Get Files** dropdown to download your chosen SRT format.
+4. **Download**: Once a video is done, use the **Get Files** dropdown to download SRT files.
+5. **Clear History**: Removes all uploaded videos, extracted audios, and generated transcripts from the server. Use when you want to free disk space or start fresh.
 
 ## 📂 Project Structure
 
 ```
 auto_caption_subtitle/
-├── app.py                 # Flask Backend & Startup Flow
-├── requirements.txt       # Python Dependencies
+├── app.py                 # Flask app; dependency check runs only when started here
+├── .env.example           # Optional env vars (copy to .env)
+├── requirements.txt      # Python dependencies
 ├── src/
-│   ├── dependency_manager.py # Environment & Package Checker
-│   ├── pipeline.py        # Batch logic & Subtitle Assembly
-│   ├── transcriber.py     # Whisper & SRT Handling
-│   ├── translator.py      # Multi-language Translation
-│   └── video_processor.py # FFmpeg Conversion
+│   ├── config.py         # Central config: paths, Whisper model, cleanup, secret
+│   ├── dependency_manager.py  # Check/install deps (invoked at app startup)
+│   ├── pipeline.py       # Video → audio → transcribe → translate → SRT
+│   ├── transcriber.py    # Whisper & SRT save helpers
+│   ├── translator.py     # Segment translation (deep-translator)
+│   └── video_processor.py    # FFmpeg video → audio
 ├── templates/
-│   └── index.html         # Redesigned Horizontal UI
+│   └── index.html        # Main UI
 ├── static/
-│   ├── css/style.css      # Premium Glassmorphic Styling
-│   └── js/script.js       # Batch Logic & Progress Management
-└── data/                  # Storage (Auto-created, Git-ignored)
+│   ├── css/style.css     # Styles
+│   └── js/script.js      # Upload, NDJSON stream, progress, downloads
+└── data/                 # Auto-created; videos, audios, transcripts (git-ignored)
 ```
 
 ## 📝 License

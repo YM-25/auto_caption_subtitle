@@ -5,7 +5,12 @@ import importlib.util
 
 def check_and_install_dependencies():
     """
-    Checks for required packages in requirements.txt and installs them if missing.
+    Check that required packages from requirements.txt are importable;
+    if any are missing, run pip install -r requirements.txt and exit on failure.
+
+    Intended to be called once at application startup (e.g. from app.py when
+    running the server). Package name parsing is best-effort (==, >=, <=, [);
+    for complex version specs, rely on pip -r requirements.txt.
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     req_file = os.path.join(base_dir, "requirements.txt")

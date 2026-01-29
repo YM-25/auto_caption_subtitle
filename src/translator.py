@@ -1,22 +1,28 @@
+"""
+Segment translation using deep_translator (Google Translate).
+One translator instance is reused for all segments to avoid repeated setup.
+"""
+
 from deep_translator import GoogleTranslator
 
-def translate_segments(segments, target_lang='en'):
+
+def translate_segments(segments, target_lang="en"):
     """
-    Translates a list of segments to the target language.
-    
+    Translate segment texts to the target language; keep timings and 1:1 order for dual SRT.
+
     Args:
-        segments (list): List of segment dictionaries (from Whisper).
-        target_lang (str): Target language code (e.g., 'en', 'zh-CN').
-        
+        segments: List of dicts with 'text', 'start', 'end' (from Whisper).
+        target_lang: Target language code (e.g. 'en', 'zh-CN').
+
     Returns:
-        list: List of segments with translated text.
+        List of segment dicts with 'text' replaced by translated text.
     """
     translated_segments = []
     print(f"Translating {len(segments)} segments to '{target_lang}'...")
-    
-    translator = GoogleTranslator(source='auto', target=target_lang)
-    
-    # Translate in batches or one by one. Keep 1:1 mapping for dual SRT.
+
+    translator = GoogleTranslator(source="auto", target=target_lang)
+
+    # One-by-one to preserve 1:1 mapping for dual SRT; empty segments kept as-is.
     for i, segment in enumerate(segments):
         original_text = segment['text'].strip()
         new_seg = segment.copy()

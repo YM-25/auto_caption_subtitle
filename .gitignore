@@ -27,6 +27,7 @@ venv/
 ENV/
 
 # Project Specific
+.env
 data/
 uploads/
 outputs/

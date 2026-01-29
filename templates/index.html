@@ -66,13 +66,11 @@
                 </button>
             </div>
 
-            <!-- Progress Area -->
-            <div class="progress-area" id="progress-area"
-                style="display: none; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--accent);"></i>
-                    <span id="progress-text"
-                        style="font-family: monospace; color: var(--text-muted);">Initializing...</span>
+            <!-- Global batch progress (shown while processing; updated by script.js) -->
+            <div class="progress-area" id="progress-area">
+                <div class="progress-area-inner">
+                    <i class="fa-solid fa-circle-notch fa-spin progress-area-icon"></i>
+                    <span id="progress-text" class="progress-area-text">Initializing...</span>
                 </div>
             </div>
 

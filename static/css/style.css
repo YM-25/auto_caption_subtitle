@@ -355,6 +355,31 @@ button#process-btn:disabled {
     border-color: #ff7675;
 }
 
+/* Global batch progress (shown by script.js during processing) */
+.progress-area {
+    display: none;
+    margin-bottom: 1.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.progress-area-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.progress-area-icon {
+    color: var(--accent);
+}
+
+.progress-area-text {
+    font-family: monospace;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 /* Download Dropdown Styles */
 .download-dropdown {
     position: relative;

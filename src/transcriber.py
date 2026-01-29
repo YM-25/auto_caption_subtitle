@@ -5,15 +5,15 @@ import math
 
 def transcribe_audio(audio_path, model_name="base", language=None):
     """
-    Transcribes an audio file to text using OpenAI Whisper.
-    
+    Transcribe an audio file using OpenAI Whisper.
+
     Args:
-        audio_path (str): Path to the input audio file.
-        model_name (str): Whisper model usage (tiny, base, small, medium, large).
-        language (str): Language code (e.g., 'en', 'zh'). If None, auto-detects.
-    
+        audio_path: Path to the input audio file.
+        model_name: Whisper model (tiny, base, small, medium, large). Use src.config.WHISPER_MODEL.
+        language: Language code (e.g. 'en', 'zh'). None or 'auto' = auto-detect.
+
     Returns:
-        dict: result containing 'text', 'segments', and 'language'.
+        dict: 'text', 'segments', 'language' (and other Whisper keys).
     """
     print(f"Loading Whisper model '{model_name}'...")
     device = "cuda" if torch.cuda.is_available() else "cpu"

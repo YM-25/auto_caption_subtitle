@@ -1,63 +1,53 @@
+"""
+Video processing pipeline: convert → transcribe → translate → SRT output.
+
+Uses src.config for paths and Whisper model name.
+Language comparison uses normalized codes (e.g. zh-CN vs zh) to avoid ambiguity.
+"""
+
 import os
-import glob
+
+from .config import get_data_paths, normalize_lang_code, WHISPER_MODEL
 from .video_processor import convert_video_to_audio
 from .transcriber import transcribe_audio, save_transcript, save_srt, save_dual_srt
 from .translator import translate_segments
 
-# Configuration
-# Allow overriding base dir for flexibility
-def get_paths(base_dir=None):
-    if base_dir is None:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
-    return {
-        'videos': os.path.join(base_dir, 'data', 'videos'),
-        'audios': os.path.join(base_dir, 'data', 'audios'),
-        'transcripts': os.path.join(base_dir, 'data', 'transcripts')
-    }
 
 def process_video(video_path, source_lang=None, target_lang=None, progress_callback=None):
     """
-    Process a single video file: Convert -> Transcribe -> Translate (opt)
-    
+    Process a single video: Convert → Transcribe → (optionally) Translate → SRT files.
+
     Args:
-        video_path (str): Absolute path to the video file.
-        source_lang (str, optional): Source language code.
-        target_lang (str, optional): Target language for translation.
-        progress_callback (func, optional): Function to call with status updates (str).
-    
+        video_path: Absolute path to the video file.
+        source_lang: Source language code (e.g. 'en', 'zh'). None = auto-detect.
+        target_lang: Target language for translation. None = transcript only;
+            'auto' = smart select (English→Chinese, others→English).
+        progress_callback: Optional callable(str) for status messages.
+
     Returns:
-        dict: Paths to generated files. 
-        Keys: 'original', 'translated', 'dual'
+        dict: Paths to generated files. Keys: 'original', optionally 'translated', 'dual'.
     """
     def log(msg):
         print(msg)
         if progress_callback:
             progress_callback(msg)
 
-    paths = get_paths()
-    os.makedirs(paths['audios'], exist_ok=True)
-    os.makedirs(paths['transcripts'], exist_ok=True)
-    
+    paths = get_data_paths()
+    os.makedirs(paths["audios"], exist_ok=True)
+    os.makedirs(paths["transcripts"], exist_ok=True)
+
     video_filename = os.path.basename(video_path)
     video_name_no_ext = os.path.splitext(video_filename)[0]
-    
-    # Define output paths
-    audio_filename = f"{video_name_no_ext}.mp3"
-    audio_path = os.path.join(paths['audios'], audio_filename)
-    
-    transcript_filename = f"{video_name_no_ext}.txt"
-    transcript_path = os.path.join(paths['transcripts'], transcript_filename)
-    
-    # NEW NAMING CONVENTION: _ori.srt
-    srt_filename = f"{video_name_no_ext}_ori.srt"
-    srt_path = os.path.join(paths['transcripts'], srt_filename)
+
+    audio_path = os.path.join(paths["audios"], f"{video_name_no_ext}.mp3")
+    transcript_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}.txt")
+    srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_ori.srt")
 
     output_files = {}
 
     log(f"Starting processing for {video_filename}...")
 
-    # Step 1: Video to Audio
+    # Step 1: Video → Audio
     log("Step 1/4: Converting video to audio...")
     if not os.path.exists(audio_path):
         try:
@@ -68,72 +58,51 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
             raise
     else:
         log("Audio file already exists, skipping conversion.")
-    
-    # Step 2: Audio to Text & Subtitles
+
     try:
-        # Transcribe
-        log(f"Step 2/4: Transcribing audio (Source: {source_lang or 'Auto'})...")
-        result = transcribe_audio(audio_path, language=source_lang)
+        # Step 2: Transcribe
+        log(f"Step 2/4: Transcribing audio (source: {source_lang or 'auto'})...")
+        result = transcribe_audio(audio_path, model_name=WHISPER_MODEL, language=source_lang)
         text = result["text"]
         segments = result["segments"]
-        detected_lang = result["language"]
-        
+        detected_lang = result.get("language") or ""
+
         log(f"Transcription complete. Detected language: {detected_lang}")
-        
-        # Save plain text
+
         log("Saving transcripts...")
         save_transcript(text, transcript_path)
-        
-        # Save original SRT
         save_srt(segments, srt_path)
-        output_files['original'] = srt_path
-        
-        # Step 3: Determine Target Language
+        output_files["original"] = srt_path
+
+        # Step 3: Target language
         log("Step 3/4: Determining target language...")
-        if target_lang is None or target_lang == 'auto':
-            # Logic: If English -> Chinese, Else -> English
-            # We treat 'en' from detection as English
-            is_english = detected_lang.lower().startswith('en')
-            effective_target = 'zh-CN' if is_english else 'en'
+        if target_lang is None or target_lang == "auto":
+            is_english = normalize_lang_code(detected_lang) == "en"
+            effective_target = "zh-CN" if is_english else "en"
             log(f"Auto-selected target language: {effective_target}")
-            do_dual = True # Auto mode defaults to dual
+            do_dual = True
         else:
-            log(f"Using requested target language: {target_lang}")
             effective_target = target_lang
-            do_dual = True # Explicit target also defaults to dual unless we add a toggle
-        
-        # Step 4: Translation
+            do_dual = True
+
+        # Step 4: Translate (only if target differs from source)
         log(f"Step 4/4: Translating subtitles to '{effective_target}'...")
-        
-        # Only translate if target is different from source/detected
-        if effective_target != detected_lang:
-            
+        if normalize_lang_code(effective_target) != normalize_lang_code(detected_lang):
             translated_segments = translate_segments(segments, target_lang=effective_target)
-            
-            # NEW NAMING CONVENTION: _trans.srt
-            translated_srt_filename = f"{video_name_no_ext}_trans.srt"
-            translated_srt_path = os.path.join(paths['transcripts'], translated_srt_filename)
-            
+            translated_srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_trans.srt")
             save_srt(translated_segments, translated_srt_path)
-            output_files['translated'] = translated_srt_path
-            
-            # Step 5: Dual Language (Bilingual)
+            output_files["translated"] = translated_srt_path
+
             if do_dual:
                 log("Generating dual-language subtitles...")
-                
-                # NEW NAMING CONVENTION: _dual.srt
-                dual_srt_filename = f"{video_name_no_ext}_dual.srt"
-                dual_srt_path = os.path.join(paths['transcripts'], dual_srt_filename)
-                
+                dual_srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_dual.srt")
                 save_dual_srt(segments, translated_segments, dual_srt_path)
-                output_files['dual'] = dual_srt_path
-                
+                output_files["dual"] = dual_srt_path
                 log("Translation and dual-subs generation complete.")
         else:
-            log("Target language matches source language. Skipping translation.")
-        
-        log("Processing finished successfully!")
-        
+            log("Target language matches source. Skipping translation.")
+
+        log("Processing finished successfully.")
     except Exception as e:
         log(f"Pipeline failed: {e}")
         import traceback
@@ -141,10 +110,3 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
         raise
 
     return output_files
-
-def main():
-    # Legacy main for CLI usage
-    pass
-
-if __name__ == "__main__":
-    main()
