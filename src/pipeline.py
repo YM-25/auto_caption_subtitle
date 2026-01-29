@@ -61,13 +61,43 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
 
     try:
         # Step 2: Transcribe
+        def whisper_lang_from_ui(code):
+            if not code:
+                return None
+            norm = normalize_lang_code(code)
+            if norm.startswith("zh"):
+                return "zh"
+            if norm == "en":
+                return "en"
+            return code.split("-")[0] if "-" in code else code
+
+        whisper_source = whisper_lang_from_ui(source_lang)
+
         log(f"Step 2/4: Transcribing audio (source: {source_lang or 'auto'})...")
-        result = transcribe_audio(audio_path, model_name=WHISPER_MODEL, language=source_lang)
+        result = transcribe_audio(audio_path, model_name=WHISPER_MODEL, language=whisper_source)
         text = result["text"]
         segments = result["segments"]
         detected_lang = result.get("language") or ""
 
+        def auto_source_lang(code):
+            if not code:
+                return ""
+            norm = normalize_lang_code(code)
+            if norm in ("zh", "zh-cn"):
+                return "zh-CN"
+            if norm == "en":
+                return "en-GB"
+            return code
+
+        effective_source = auto_source_lang(detected_lang) if source_lang is None else source_lang
+        source_bias_hint = ""
+        if source_lang is None and normalize_lang_code(detected_lang) == "zh" and normalize_lang_code(effective_source) == "zh-cn":
+            log("Detected Chinese without script/region. Defaulting source to zh-CN (Simplified).")
+            source_bias_hint = "_src-zh-CN"
+
         log(f"Transcription complete. Detected language: {detected_lang}")
+        if source_lang is None:
+            log(f"Auto source language resolved to: {effective_source or detected_lang}")
 
         log("Saving transcripts...")
         save_transcript(text, transcript_path)
@@ -76,9 +106,18 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
 
         # Step 3: Target language
         log("Step 3/4: Determining target language...")
-        if target_lang is None or target_lang == "auto":
-            is_english = normalize_lang_code(detected_lang) == "en"
-            effective_target = "zh-CN" if is_english else "en"
+        if target_lang is None:
+            effective_target = None
+            do_dual = False
+            log("Target language set to None (transcript only). Skipping translation.")
+        elif target_lang == "auto":
+            source_norm = normalize_lang_code(effective_source or detected_lang)
+            if source_norm == "zh-cn":
+                effective_target = "en-GB"
+            elif source_norm == "en":
+                effective_target = "zh-CN"
+            else:
+                effective_target = "en-GB"
             log(f"Auto-selected target language: {effective_target}")
             do_dual = True
         else:
@@ -86,16 +125,20 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
             do_dual = True
 
         # Step 4: Translate (only if target differs from source)
-        log(f"Step 4/4: Translating subtitles to '{effective_target}'...")
-        if normalize_lang_code(effective_target) != normalize_lang_code(detected_lang):
+        if effective_target is None:
+            log("Step 4/4: Translation skipped (transcript only).")
+        else:
+            log(f"Step 4/4: Translating subtitles to '{effective_target}'...")
+        source_compare = normalize_lang_code(effective_source or detected_lang)
+        if effective_target is not None and normalize_lang_code(effective_target) != source_compare:
             translated_segments = translate_segments(segments, target_lang=effective_target)
-            translated_srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_trans.srt")
+            translated_srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_trans{source_bias_hint}.srt")
             save_srt(translated_segments, translated_srt_path)
             output_files["translated"] = translated_srt_path
 
             if do_dual:
                 log("Generating dual-language subtitles...")
-                dual_srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_dual.srt")
+                dual_srt_path = os.path.join(paths["transcripts"], f"{video_name_no_ext}_dual{source_bias_hint}.srt")
                 save_dual_srt(segments, translated_segments, dual_srt_path)
                 output_files["dual"] = dual_srt_path
                 log("Translation and dual-subs generation complete.")

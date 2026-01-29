@@ -47,6 +47,10 @@ def normalize_lang_code(code):
     code = (code or "").strip().lower()
     # Map common variants to primary code
     if code.startswith("zh"):
+        if "hant" in code or code.endswith("-tw") or code.endswith("-hk") or code.endswith("-mo"):
+            return "zh-tw"
+        if "hans" in code or code.endswith("-cn") or code.endswith("-sg"):
+            return "zh-cn"
         return "zh"
     if code.startswith("en"):
         return "en"
