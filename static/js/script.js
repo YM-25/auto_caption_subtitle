@@ -1,18 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
     const uploadArea = document.getElementById('upload-area');
     const fileInput = document.getElementById('file-input');
-    const fileInfo = document.getElementById('file-info');
-    const filenameSpan = document.getElementById('filename');
-    const removeBtn = document.getElementById('remove-file');
+    const videoList = document.getElementById('video-list');
+    const globalActions = document.getElementById('global-actions');
     const processBtn = document.getElementById('process-btn');
-    const sourceLangSelect = document.getElementById('source-language-select');
-    const targetLangSelect = document.getElementById('target-language-select');
-    const resultsArea = document.getElementById('results-area');
+    const clearBtn = document.getElementById('clear-btn');
     const uploadContent = document.querySelector('.upload-content');
-    const progressArea = document.getElementById('progress-area');
-    const progressText = document.getElementById('progress-text');
 
-    let currentFile = null;
+    let videoQueue = []; // Array of objects { file, id, status, results }
 
     // Drag & Drop
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -32,17 +27,13 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('drag-over'), false);
     });
 
-    uploadArea.addEventListener('drop', handleDrop, false);
-
-    function handleDrop(e) {
+    uploadArea.addEventListener('drop', (e) => {
         const dt = e.dataTransfer;
-        const files = dt.files;
-        handleFiles(files);
-    }
+        handleFiles(dt.files);
+    }, false);
 
-    // Click to upload
     uploadArea.addEventListener('click', (e) => {
-        if (e.target !== removeBtn) {
+        if (!e.target.closest('.video-item')) {
             fileInput.click();
         }
     });
@@ -51,45 +42,125 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleFiles(files) {
         if (files.length > 0) {
-            currentFile = files[0];
-            showFile(currentFile);
+            Array.from(files).forEach(file => {
+                const videoId = Math.random().toString(36).substring(2, 11);
+                const videoData = {
+                    file: file,
+                    id: videoId,
+                    status: 'pending',
+                    results: null
+                };
+                videoQueue.push(videoData);
+                addVideoToUI(videoData);
+            });
+            updateUIState();
         }
     }
 
-    function showFile(file) {
-        filenameSpan.textContent = file.name;
-        fileInfo.style.display = 'flex';
-        uploadContent.style.display = 'none';
-        processBtn.disabled = false;
-        resultsArea.innerHTML = '';
-        progressArea.style.display = 'none';
+    function addVideoToUI(video) {
+        const item = document.createElement('div');
+        item.className = 'video-item';
+        item.id = `video-${video.id}`;
+        item.innerHTML = `
+            <div class="video-header">
+                <i class="fa-solid fa-file-video" style="color: var(--primary);"></i>
+                <span class="video-name" title="${video.file.name}">${video.file.name}</span>
+            </div>
+            <div class="video-item-settings">
+                <div class="setting-group">
+                    <label>Source Language:</label>
+                    <select class="source-lang-select">
+                        <option value="auto">Auto Detect</option>
+                        <option value="en">English</option>
+                        <option value="zh">Chinese</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Target Language:</label>
+                    <select class="target-lang-select">
+                        <option value="auto">Auto (Smart Select)</option>
+                        <option value="zh-CN">Chinese (Simplified)</option>
+                        <option value="en">English (UK)</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="none">None (Transcript Only)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="video-progress" id="progress-${video.id}">Waiting for processing...</div>
+            <div class="video-results" id="results-${video.id}"></div>
+            <i class="fa-solid fa-xmark remove-video-btn" data-id="${video.id}" title="Remove Video"></i>
+        `;
+
+        item.querySelector('.remove-video-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeVideo(video.id);
+        });
+
+        videoList.appendChild(item);
     }
 
-    removeBtn.addEventListener('click', () => {
-        currentFile = null;
-        fileInput.value = '';
-        fileInfo.style.display = 'none';
-        uploadContent.style.display = 'block';
+    function removeVideo(id) {
+        videoQueue = videoQueue.filter(v => v.id !== id);
+        const el = document.getElementById(`video-${id}`);
+        if (el) el.remove();
+        updateUIState();
+    }
+
+    function updateUIState() {
+        if (videoQueue.length > 0) {
+            uploadContent.style.padding = '1rem';
+            uploadContent.querySelector('h3').textContent = 'Add More Videos';
+            globalActions.style.display = 'block';
+            processBtn.disabled = videoQueue.every(v => v.status === 'completed');
+        } else {
+            uploadContent.style.padding = '3rem 2rem';
+            uploadContent.querySelector('h3').textContent = 'Drag & Drop Video Here';
+            globalActions.style.display = 'none';
+        }
+    }
+
+    processBtn.addEventListener('click', async () => {
         processBtn.disabled = true;
-        progressArea.style.display = 'none';
+        processBtn.querySelector('.btn-text').textContent = "Processing Batch...";
+        processBtn.querySelector('.loader').style.display = 'block';
+
+        for (const video of videoQueue) {
+            if (video.status === 'completed' || video.status === 'processing') continue;
+
+            await processSingleVideo(video);
+        }
+
+        processBtn.querySelector('.btn-text').textContent = "Generate All Subtitles";
+        processBtn.querySelector('.loader').style.display = 'none';
+        updateUIState();
     });
 
-    // Process with Stream support
-    processBtn.addEventListener('click', async () => {
-        if (!currentFile) return;
+    async function processSingleVideo(video) {
+        const itemEl = document.getElementById(`video-${video.id}`);
+        const progressEl = document.getElementById(`progress-${video.id}`);
+        const resultsEl = document.getElementById(`results-${video.id}`);
+        const sourceSelect = itemEl.querySelector('.source-lang-select');
+        const targetSelect = itemEl.querySelector('.target-lang-select');
 
-        // UI Loading State
-        processBtn.disabled = true;
-        processBtn.querySelector('.btn-text').textContent = "Processing...";
-        processBtn.querySelector('.loader').style.display = 'block';
-        resultsArea.innerHTML = '';
-        progressArea.style.display = 'block';
-        progressText.textContent = "Initiating upload...";
+        video.status = 'processing';
+        progressEl.style.display = 'block';
+        resultsEl.style.display = 'none';
+        sourceSelect.disabled = true;
+        targetSelect.disabled = true;
 
         const formData = new FormData();
-        formData.append('file', currentFile);
-        formData.append('source_language', sourceLangSelect.value);
-        formData.append('target_language', targetLangSelect.value);
+        formData.append('file', video.file);
+        formData.append('source_language', sourceSelect.value);
+        formData.append('target_language', targetSelect.value);
 
         try {
             const response = await fetch('/upload_and_process', {
@@ -97,19 +168,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
 
-            if (!response.ok) {
-                const text = await response.text();
-                let message = 'Upload failed';
-                try {
-                    const errorData = JSON.parse(text);
-                    if (errorData && errorData.error) message = errorData.error;
-                } catch (_) {
-                    if (text) message = text.slice(0, 200);
-                }
-                throw new Error(message);
-            }
+            if (!response.ok) throw new Error('Upload failed');
 
-            // Read the stream
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
             let buffer = '';
@@ -120,83 +180,85 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-
-                // Process all complete lines
-                buffer = lines.pop(); // Keep the last partial line in buffer
+                buffer = lines.pop();
 
                 for (const line of lines) {
                     if (!line.trim()) continue;
-
-                    try {
-                        const data = JSON.parse(line);
-
-                        if (data.type === 'progress') {
-                            progressText.textContent = data.message;
-                        }
-                        else if (data.type === 'result') {
-                            displayResults(data.files);
-                            progressText.textContent = "Done!";
-                        }
-                        else if (data.type === 'error') {
-                            alert('Error: ' + data.message);
-                            progressText.textContent = "Error occurred.";
-                        }
-                    } catch (e) {
-                        console.error('Error parsing JSON chunk', e);
+                    const data = JSON.parse(line);
+                    if (data.type === 'progress') {
+                        progressEl.textContent = data.message;
+                    } else if (data.type === 'result') {
+                        video.status = 'completed';
+                        video.results = data.files;
+                        displayVideoResults(video);
+                        progressEl.style.display = 'none';
+                    } else if (data.type === 'error') {
+                        throw new Error(data.message);
                     }
                 }
             }
-
         } catch (error) {
-            console.error('Error:', error);
-            alert('An error occurred: ' + error.message);
-            progressText.textContent = "Failed.";
-        } finally {
-            // Reset UI
-            processBtn.disabled = false;
-            processBtn.querySelector('.btn-text').textContent = "Generate Subtitles";
-            processBtn.querySelector('.loader').style.display = 'none';
+            console.error(error);
+            video.status = 'error';
+            progressEl.textContent = `Error: ${error.message}`;
+            sourceSelect.disabled = false;
+            targetSelect.disabled = false;
         }
-    });
+    }
 
-    function displayResults(files) {
-        resultsArea.innerHTML = '';
-        if (files.length === 0) return;
+    function displayVideoResults(video) {
+        const itemEl = document.getElementById(`video-${video.id}`);
+        const resultsEl = document.getElementById(`results-${video.id}`);
+        resultsEl.style.display = 'block';
 
-        files.forEach((file, index) => {
-            const item = document.createElement('div');
-            item.className = 'result-item';
-            item.style.animationDelay = `${index * 0.1}s`;
+        let html = `
+            <div class="download-dropdown" id="dropdown-${video.id}">
+                <button class="dropdown-toggle" style="width: 100%; justify-content: space-between;">
+                    <span><i class="fa-solid fa-download"></i> Get Files</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+                <div class="dropdown-menu">
+        `;
 
-            item.innerHTML = `
-                <span><i class="fa-solid fa-file-contract"></i> ${file.label}</span>
-                <a href="${file.url}" class="download-link" download><i class="fa-solid fa-download"></i> Download</a>
-            `;
+        video.results.forEach(file => {
+            html += `<a href="${file.url}" download><i class="fa-solid fa-file-arrow-down"></i> ${file.label}</a>`;
+        });
 
-            resultsArea.appendChild(item);
+        html += `</div></div>`;
+        resultsEl.innerHTML = html;
+
+        const dropdown = resultsEl.querySelector('.download-dropdown');
+        const toggle = dropdown.querySelector('.dropdown-toggle');
+
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+
+            const wasActive = dropdown.classList.contains('show-dropdown');
+
+            // Close all
+            document.querySelectorAll('.download-dropdown').forEach(d => d.classList.remove('show-dropdown'));
+            document.querySelectorAll('.video-item').forEach(item => item.classList.remove('is-active'));
+
+            if (!wasActive) {
+                dropdown.classList.add('show-dropdown');
+                itemEl.classList.add('is-active');
+            }
         });
     }
 
-    // Clear History
-    const clearBtn = document.getElementById('clear-btn');
-    clearBtn.addEventListener('click', async () => {
-        if (!confirm('Are you sure you want to delete all uploaded videos and generated subtitles? This cannot be undone.')) {
-            return;
-        }
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.download-dropdown').forEach(d => d.classList.remove('show-dropdown'));
+        document.querySelectorAll('.video-item').forEach(item => item.classList.remove('is-active'));
+    });
 
-        try {
-            const response = await fetch('/clear_history', { method: 'POST' });
-            if (response.ok) {
-                alert('History cleared successfully.');
-                // Reset UI
-                if (currentFile) removeBtn.click();
-                resultsArea.innerHTML = '';
-            } else {
-                alert('Failed to clear history.');
-            }
-        } catch (error) {
-            console.error('Error clearing history:', error);
-            alert('Error clearing history.');
+    clearBtn.addEventListener('click', async () => {
+        if (!confirm('Clear all files and history?')) return;
+        const response = await fetch('/clear_history', { method: 'POST' });
+        if (response.ok) {
+            videoQueue = [];
+            videoList.innerHTML = '';
+            updateUIState();
+            alert('History cleared.');
         }
     });
 });

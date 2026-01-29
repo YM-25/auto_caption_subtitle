@@ -1,6 +1,11 @@
 import os
 import secrets
 import json
+from src.dependency_manager import check_and_install_dependencies
+
+# Ensure all dependencies are installed before starting
+check_and_install_dependencies()
+
 from flask import Flask, render_template, request, send_file, jsonify, Response, stream_with_context
 from werkzeug.utils import secure_filename
 from src.pipeline import process_video
@@ -55,8 +60,11 @@ def upload_and_process():
         source_lang = None
         
     target_lang = request.form.get('target_language', 'auto')
+    # Use 'none' or explicit empty to skip translation, 'auto' means dual
     if target_lang == 'auto':
-        target_lang = None 
+        target_lang = 'auto' # pipeline handles this
+    elif not target_lang or target_lang == 'none':
+        target_lang = None
 
     def generate():
         try:

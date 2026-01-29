@@ -40,8 +40,8 @@ body {
 }
 
 .container {
-    width: 90%;
-    max-width: 600px;
+    width: 95%;
+    max-width: 1000px;
     padding: 2rem;
     position: relative;
     z-index: 1;
@@ -146,6 +146,105 @@ header {
 #remove-file {
     cursor: pointer;
     color: #ff7675;
+}
+
+.video-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.video-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.8rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    backdrop-filter: var(--glass);
+    animation: fadeIn 0.5s ease;
+    position: relative;
+    transition: z-index 0.3s;
+}
+
+.video-item.is-active {
+    z-index: 100;
+}
+
+.video-header {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    flex: 2;
+    min-width: 0;
+}
+
+.video-name {
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.95rem;
+}
+
+.video-item-settings {
+    display: flex;
+    gap: 0.8rem;
+    flex: 3;
+}
+
+.video-item-settings .setting-group {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.video-item-settings .setting-group label {
+    margin-bottom: 0;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.video-item-settings select {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.video-progress {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    padding: 0.4rem 0.6rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    display: none;
+    flex: 1.5;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.video-results {
+    display: none;
+    flex: 1.5;
+}
+
+.remove-video-btn {
+    color: #ff7675;
+    cursor: pointer;
+    font-size: 1.1rem;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+    margin-left: auto;
+}
+
+.remove-video-btn:hover {
+    opacity: 1;
 }
 
 /* Settings */
@@ -254,6 +353,62 @@ button#process-btn:disabled {
 .secondary-btn:hover {
     background: rgba(255, 118, 117, 0.1);
     border-color: #ff7675;
+}
+
+/* Download Dropdown Styles */
+.download-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-toggle {
+    background: var(--accent);
+    color: #000;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: #1e1e24;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    z-index: 10;
+    min-width: 200px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    margin-top: 5px;
+}
+
+.dropdown-menu a {
+    display: block;
+    padding: 0.8rem 1rem;
+    color: var(--text-main);
+    text-decoration: none;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.dropdown-menu a:last-child {
+    border-bottom: none;
+}
+
+.dropdown-menu a:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--accent);
+}
+
+.show-dropdown .dropdown-menu {
+    display: block;
 }
 
 /* Results */

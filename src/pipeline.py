@@ -94,18 +94,21 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
             # Logic: If English -> Chinese, Else -> English
             # We treat 'en' from detection as English
             is_english = detected_lang.lower().startswith('en')
-            target_lang = 'zh-CN' if is_english else 'en'
-            log(f"Auto-selected target language: {target_lang}")
+            effective_target = 'zh-CN' if is_english else 'en'
+            log(f"Auto-selected target language: {effective_target}")
+            do_dual = True # Auto mode defaults to dual
         else:
             log(f"Using requested target language: {target_lang}")
+            effective_target = target_lang
+            do_dual = True # Explicit target also defaults to dual unless we add a toggle
         
         # Step 4: Translation
-        log(f"Step 4/4: Translating subtitles to '{target_lang}'...")
+        log(f"Step 4/4: Translating subtitles to '{effective_target}'...")
         
         # Only translate if target is different from source/detected
-        if target_lang != detected_lang:
+        if effective_target != detected_lang:
             
-            translated_segments = translate_segments(segments, target_lang=target_lang)
+            translated_segments = translate_segments(segments, target_lang=effective_target)
             
             # NEW NAMING CONVENTION: _trans.srt
             translated_srt_filename = f"{video_name_no_ext}_trans.srt"
@@ -115,16 +118,17 @@ def process_video(video_path, source_lang=None, target_lang=None, progress_callb
             output_files['translated'] = translated_srt_path
             
             # Step 5: Dual Language (Bilingual)
-            log("Generating dual-language subtitles...")
-            
-            # NEW NAMING CONVENTION: _dual.srt
-            dual_srt_filename = f"{video_name_no_ext}_dual.srt"
-            dual_srt_path = os.path.join(paths['transcripts'], dual_srt_filename)
-            
-            save_dual_srt(segments, translated_segments, dual_srt_path)
-            output_files['dual'] = dual_srt_path
-            
-            log("Translation and dual-subs generation complete.")
+            if do_dual:
+                log("Generating dual-language subtitles...")
+                
+                # NEW NAMING CONVENTION: _dual.srt
+                dual_srt_filename = f"{video_name_no_ext}_dual.srt"
+                dual_srt_path = os.path.join(paths['transcripts'], dual_srt_filename)
+                
+                save_dual_srt(segments, translated_segments, dual_srt_path)
+                output_files['dual'] = dual_srt_path
+                
+                log("Translation and dual-subs generation complete.")
         else:
             log("Target language matches source language. Skipping translation.")
         
