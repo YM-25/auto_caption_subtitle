@@ -28,11 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const resumeAllBtn = document.getElementById('resume-all-btn');
     const glossaryText = document.getElementById('glossary-text');
     const glossaryUseSaved = document.getElementById('glossary-use-saved');
-    const glossarySave = document.getElementById('glossary-save');
     const glossaryUseFilename = document.getElementById('glossary-use-filename');
-    const glossaryUsePrompt = document.getElementById('glossary-use-prompt');
     const glossaryFile = document.getElementById('glossary-file');
-    const glossaryMode = document.getElementById('glossary-mode');
+    const glossaryPreviewInput = document.getElementById('glossary-preview-input');
+    const glossarySaveNow = document.getElementById('glossary-save-now');
+    const glossaryPreviewContent = document.getElementById('glossary-preview-content');
     const logModal = document.getElementById('log-modal');
     const logModalContent = document.getElementById('log-modal-content');
     const logModalDownload = document.getElementById('log-modal-download');
@@ -296,11 +296,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="setting-group">
                     <label>Initial Prompt (Override):</label>
                     <textarea class="video-prompt-input" rows="2" placeholder="Optional: names, places, terms"></textarea>
-                </div>
-                <div class="setting-group">
                     <label class="checkbox-row">
                         <input type="checkbox" class="video-infer-checkbox" data-default="batch">
-                        Infer terms from filename (use batch by default)
+                        Infer keywords from filename (use batch by default)
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label>Glossary (append for this video):</label>
+                    <textarea class="video-glossary-input" rows="2" placeholder="term = translation"></textarea>
+                    <label class="checkbox-row">
+                        <input type="checkbox" class="video-glossary-save">
+                        Save this glossary to saved list
                     </label>
                 </div>
             </div>
@@ -633,6 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoModelSelect = itemEl.querySelector('.video-model-select');
         const videoPromptInput = itemEl.querySelector('.video-prompt-input');
         const videoInferCheckbox = itemEl.querySelector('.video-infer-checkbox');
+        const videoGlossaryInput = itemEl.querySelector('.video-glossary-input');
+        const videoGlossarySave = itemEl.querySelector('.video-glossary-save');
 
         video.status = 'processing';
         progressEl.style.display = 'block';
@@ -644,9 +652,15 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', video.file);
         formData.append('source_language', sourceSelect.value);
         formData.append('target_language', targetSelect.value);
-        formData.append('glossary_text', glossaryText ? glossaryText.value : '');
+        const globalGlossaryText = glossaryText ? glossaryText.value : '';
+        const videoGlossaryText = videoGlossaryInput ? videoGlossaryInput.value : '';
+        const combinedGlossary = [globalGlossaryText, videoGlossaryText].filter((v) => v && v.trim()).join('\n');
+        formData.append('glossary_text', combinedGlossary);
         formData.append('glossary_use_saved', glossaryUseSaved && glossaryUseSaved.checked ? '1' : '0');
-        formData.append('glossary_save', glossarySave && glossarySave.checked ? '1' : '0');
+        formData.append('glossary_save', videoGlossarySave && videoGlossarySave.checked ? '1' : '0');
+        if (videoGlossarySave && videoGlossarySave.checked) {
+            formData.append('glossary_save_text', videoGlossaryText);
+        }
         if (videoInferCheckbox && videoInferCheckbox.dataset.mode === 'override') {
             formData.append('glossary_use_filename', videoInferCheckbox.checked ? '1' : '0');
         } else if (videoInferCheckbox) {
@@ -654,8 +668,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             formData.append('glossary_use_filename', glossaryUseFilename && glossaryUseFilename.checked ? '1' : '0');
         }
-        formData.append('glossary_prompt', glossaryUsePrompt && glossaryUsePrompt.checked ? '1' : '0');
-        formData.append('glossary_mode', glossaryMode ? glossaryMode.value : 'merge');
         if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
             formData.append('glossary_file', glossaryFile.files[0]);
         }
@@ -750,9 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('target_language', targetSelect.value);
         formData.append('glossary_text', glossaryText ? glossaryText.value : '');
         formData.append('glossary_use_saved', glossaryUseSaved && glossaryUseSaved.checked ? '1' : '0');
-        formData.append('glossary_save', glossarySave && glossarySave.checked ? '1' : '0');
         formData.append('glossary_use_filename', glossaryUseFilename && glossaryUseFilename.checked ? '1' : '0');
-        formData.append('glossary_mode', glossaryMode ? glossaryMode.value : 'merge');
         if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
             formData.append('glossary_file', glossaryFile.files[0]);
         }
@@ -919,6 +929,144 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logModalClose) logModalClose.addEventListener('click', closeLogModal);
     if (logModalDismiss) logModalDismiss.addEventListener('click', closeLogModal);
     if (logModalBackdrop) logModalBackdrop.addEventListener('click', closeLogModal);
+
+    function normalizeGlossaryDict(dict) {
+        const normalized = {};
+        Object.entries(dict || {}).forEach(([key, value]) => {
+            const term = String(key || '').trim();
+            if (!term) return;
+            normalized[term] = String(value || '').trim() || term;
+        });
+        return normalized;
+    }
+
+    function parseGlossaryTextToDict(text) {
+        const dict = {};
+        if (!text) return dict;
+        text.split(/\r?\n/).forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return;
+            if (trimmed.includes('->')) {
+                const [src, tgt] = trimmed.split('->', 2);
+                const term = src.trim();
+                const val = (tgt || '').trim();
+                if (term) dict[term] = val || term;
+                return;
+            }
+            if (trimmed.includes('=')) {
+                const [src, tgt] = trimmed.split('=', 2);
+                const term = src.trim();
+                const val = (tgt || '').trim();
+                if (term) dict[term] = val || term;
+            }
+        });
+        return dict;
+    }
+
+    function parseGlossaryJsonToDict(jsonText) {
+        try {
+            const data = JSON.parse(jsonText);
+            if (Array.isArray(data)) {
+                const dict = {};
+                data.forEach((item) => {
+                    if (!item || typeof item !== 'object') return;
+                    const term = String(item.term || '').trim();
+                    const translation = String(item.translation || '').trim();
+                    if (term) dict[term] = translation || term;
+                });
+                return dict;
+            }
+            if (data && typeof data === 'object') {
+                return data;
+            }
+        } catch (_) {
+            return {};
+        }
+        return {};
+    }
+
+    async function buildGlossaryInputDict() {
+        let dict = {};
+        if (glossaryText && glossaryText.value.trim()) {
+            dict = { ...dict, ...parseGlossaryTextToDict(glossaryText.value) };
+        }
+        if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
+            const file = glossaryFile.files[0];
+            const text = await file.text();
+            if (file.name.toLowerCase().endsWith('.json')) {
+                dict = { ...dict, ...parseGlossaryJsonToDict(text) };
+            } else {
+                dict = { ...dict, ...parseGlossaryTextToDict(text) };
+            }
+        }
+        return normalizeGlossaryDict(dict);
+    }
+
+    let glossaryInputUrl = null;
+
+    async function refreshGlossaryInputLink() {
+        if (!glossaryPreviewInput) return;
+        const dict = await buildGlossaryInputDict();
+        const jsonText = JSON.stringify(dict, null, 2);
+        if (glossaryInputUrl) {
+            URL.revokeObjectURL(glossaryInputUrl);
+        }
+        const blob = new Blob([jsonText || '{}'], { type: 'application/json;charset=utf-8' });
+        glossaryInputUrl = URL.createObjectURL(blob);
+        glossaryPreviewInput.href = glossaryInputUrl;
+    }
+
+    if (glossaryText) {
+        glossaryText.addEventListener('input', () => {
+            refreshGlossaryInputLink();
+        });
+    }
+
+    if (glossaryFile) {
+        glossaryFile.addEventListener('change', () => {
+            refreshGlossaryInputLink();
+        });
+    }
+
+    refreshGlossaryInputLink();
+
+    async function refreshSavedGlossaryPreview() {
+        if (!glossaryPreviewContent) return;
+        try {
+            const res = await fetch('/glossary/preview');
+            if (!res.ok) {
+                glossaryPreviewContent.textContent = '{}';
+                return;
+            }
+            const text = await res.text();
+            glossaryPreviewContent.textContent = text || '{}';
+        } catch (_) {
+            glossaryPreviewContent.textContent = '{}';
+        }
+    }
+
+    refreshSavedGlossaryPreview();
+
+    if (glossarySaveNow) {
+        glossarySaveNow.addEventListener('click', async () => {
+            const formData = new FormData();
+            formData.append('glossary_text', glossaryText ? glossaryText.value : '');
+            if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
+                formData.append('glossary_file', glossaryFile.files[0]);
+            }
+            try {
+                const res = await fetch('/glossary/save', { method: 'POST', body: formData });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data.error || 'Failed to save glossary');
+                }
+                alert(`Saved glossary. Total terms: ${data.total_terms || 0}.`);
+                refreshSavedGlossaryPreview();
+            } catch (err) {
+                alert(`Glossary save failed: ${err.message}`);
+            }
+        });
+    }
 
     document.addEventListener('click', () => {
         document.querySelectorAll('.download-dropdown').forEach((d) => d.classList.remove('show-dropdown'));

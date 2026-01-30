@@ -137,8 +137,8 @@ def upload_and_process():
     glossary_use_saved = request.form.get("glossary_use_saved", "1").strip() == "1"
     glossary_save = request.form.get("glossary_save", "0").strip() == "1"
     glossary_use_filename = request.form.get("glossary_use_filename", "1").strip() == "1"
-    glossary_mode = request.form.get("glossary_mode", "merge").strip()
     glossary_prompt = request.form.get("glossary_prompt", "0").strip() == "1"
+    glossary_save_text = request.form.get("glossary_save_text", "").strip()
 
     glossary_file = request.files.get("glossary_file")
     glossary_file_path = None
@@ -150,13 +150,11 @@ def upload_and_process():
     saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
     text_glossary = parse_glossary_text(glossary_text)
     file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
-    if glossary_mode == "replace":
-        merged_glossary = merge_glossaries(text_glossary, file_glossary)
-    else:
-        merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
+    merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
 
-    if glossary_save and (text_glossary or file_glossary):
-        updated = merge_glossaries(saved_glossary, text_glossary, file_glossary)
+    if glossary_save and (text_glossary or file_glossary or glossary_save_text):
+        save_text_glossary = parse_glossary_text(glossary_save_text)
+        updated = merge_glossaries(saved_glossary, save_text_glossary, text_glossary, file_glossary)
         save_glossary(GLOSSARY_FILE, updated)
 
     if glossary_prompt and merged_glossary:
@@ -347,7 +345,6 @@ def upload_srt_and_translate():
     glossary_use_saved = request.form.get("glossary_use_saved", "1").strip() == "1"
     glossary_save = request.form.get("glossary_save", "0").strip() == "1"
     glossary_use_filename = request.form.get("glossary_use_filename", "1").strip() == "1"
-    glossary_mode = request.form.get("glossary_mode", "merge").strip()
 
     glossary_file = request.files.get("glossary_file")
     glossary_file_path = None
@@ -359,10 +356,7 @@ def upload_srt_and_translate():
     saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
     text_glossary = parse_glossary_text(glossary_text)
     file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
-    if glossary_mode == "replace":
-        merged_glossary = merge_glossaries(text_glossary, file_glossary)
-    else:
-        merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
+    merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
 
     if glossary_save and (text_glossary or file_glossary):
         updated = merge_glossaries(saved_glossary, text_glossary, file_glossary)
@@ -505,6 +499,42 @@ def preview_file(filename):
     return send_file(path, as_attachment=False)
 
 
+@app.route("/glossary/preview")
+def preview_glossary():
+    if not os.path.isfile(GLOSSARY_FILE):
+        return jsonify({"error": "Glossary not found"}), 404
+    return send_file(GLOSSARY_FILE, as_attachment=False)
+
+
+@app.route("/glossary/download")
+def download_glossary():
+    if not os.path.isfile(GLOSSARY_FILE):
+        return jsonify({"error": "Glossary not found"}), 404
+    return send_file(GLOSSARY_FILE, as_attachment=True, download_name=os.path.basename(GLOSSARY_FILE))
+
+
+@app.route("/glossary/save", methods=["POST"])
+def save_glossary_now():
+    glossary_text = request.form.get("glossary_text", "").strip()
+    glossary_file = request.files.get("glossary_file")
+
+    glossary_file_path = None
+    if glossary_file and glossary_file.filename:
+        glossary_name = secure_filename(glossary_file.filename)
+        glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
+        glossary_file.save(glossary_file_path)
+
+    saved_glossary = load_glossary(GLOSSARY_FILE)
+    text_glossary = parse_glossary_text(glossary_text)
+    file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
+
+    merged = merge_glossaries(saved_glossary, text_glossary, file_glossary)
+    save_glossary(GLOSSARY_FILE, merged)
+
+    added_count = len(text_glossary) + len(file_glossary)
+    return jsonify({"message": "Glossary saved", "total_terms": len(merged), "added_terms": added_count})
+
+
 @app.route("/clear_history", methods=["POST"])
 def clear_history():
     """Remove all files in videos, audios, and transcripts folders."""
@@ -519,6 +549,8 @@ def clear_history():
             for name in os.listdir(folder):
                 path = os.path.join(folder, name)
                 try:
+                    if os.path.abspath(path) == os.path.abspath(GLOSSARY_FILE):
+                        continue
                     if os.path.isfile(path) or os.path.islink(path):
                         os.unlink(path)
                     elif os.path.isdir(path):

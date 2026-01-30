@@ -114,33 +114,34 @@
                     </div>
 
                     <div class="setting-group">
-                        <label for="glossary-text"><i class="fa-solid fa-book"></i> Glossary (term=translation)</label>
-                        <textarea id="glossary-text" rows="4" placeholder="Example:\nAPI=API\nAutoCaption Pro=AutoCaption Pro"></textarea>
-                        <div class="helper-text">Supports term=translation, term->translation, or term,translation per line.</div>
+                        <label for="glossary-text"><i class="fa-solid fa-book"></i> Glossary</label>
+                        <div class="glossary-input-row">
+                            <textarea id="glossary-text" rows="4" placeholder="Enter glossary terms here..."></textarea>
+                            <button class="primary-btn glossary-save-btn" id="glossary-save-now" type="button">Save Now</button>
+                        </div>
+                        <div class="helper-text">Supports only: term = translation, or term -> translation (one per line).</div>
+                        <div class="glossary-preview">
+                            <div class="glossary-preview-header">
+                                <span>Saved glossary preview</span>
+                            </div>
+                            <pre id="glossary-preview-content" class="glossary-preview-body">Loading...</pre>
+                        </div>
                         <div class="glossary-actions">
-                            <label class="checkbox-row">
-                                <input type="checkbox" id="glossary-use-saved" checked>
-                                Use saved glossary
-                            </label>
-                            <label class="checkbox-row">
-                                <input type="checkbox" id="glossary-save">
-                                Save input to glossary
-                            </label>
-                            <label class="checkbox-row">
-                                <input type="checkbox" id="glossary-use-prompt">
-                                Inject glossary into Whisper prompt
-                            </label>
+                            <div class="checkbox-row">
+                                <label class="checkbox-label glossary-label">
+                                    <input type="checkbox" id="glossary-use-saved" checked>
+                                    <a class="glossary-link" id="glossary-preview-saved" href="/glossary/preview" target="_blank" rel="noopener">Use saved glossary</a>
+                                </label>
+                            </div>
+                            <div class="checkbox-row">
+                                <label class="checkbox-label glossary-label">
+                                    <a class="glossary-link" id="glossary-preview-input" href="#" target="_blank" rel="noopener">Save input to glossary</a>
+                                </label>
+                            </div>
                         </div>
                         <div class="setting-group">
                             <label for="glossary-file">Upload Glossary (CSV/JSON/TXT)</label>
                             <input type="file" id="glossary-file" accept=".csv,.json,.txt">
-                        </div>
-                        <div class="setting-group">
-                            <label for="glossary-mode">Glossary Merge Mode</label>
-                            <select id="glossary-mode">
-                                <option value="merge">Merge with saved</option>
-                                <option value="replace">Replace saved (this batch only)</option>
-                            </select>
                         </div>
                     </div>
                 </div>
@@ -206,6 +207,7 @@
             </div>
         </div>
     </div>
+
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>

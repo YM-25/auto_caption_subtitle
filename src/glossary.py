@@ -53,10 +53,8 @@ def parse_glossary_text(text: str) -> Dict[str, str]:
             src, tgt = line.split("->", 1)
         elif "=" in line:
             src, tgt = line.split("=", 1)
-        elif "," in line:
-            src, tgt = line.split(",", 1)
         else:
-            src, tgt = line, line
+            continue
         src = src.strip()
         tgt = tgt.strip()
         if src:
