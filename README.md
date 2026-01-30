@@ -1,7 +1,7 @@
 <div align="center">
   <h1>AutoCaption Pro 🎥📝</h1>
   <p><em>Vibe your subtitles like vibing code.</em></p>
-  <p><strong>English</strong> | 中文 (coming soon)</p>
+  <p><strong>English</strong> | <a href="readme_chn.md">中文</a></p>
 </div>
 
 ---
@@ -26,7 +26,11 @@ This tool runs fully **locally**. You need a local Python installation and requi
   - `*.{source}__{target}.srt`: Translated subtitles (e.g. `.zh-cn__en-gb`).
   - `*.{source}__{target}.dual.srt`: **Bilingual subtitles** (Target on top, Source on bottom).
 - **🧾 SRT Translate Mode**: Upload edited SRT files and generate translated + bilingual outputs.
+- **📚 Glossary Manager**: Save reusable glossary terms, upload MD/TXT/JSON glossaries, and append per-video terms.
+- **🧠 Filename Keyword Inference**: Auto-infer keywords from filenames to bias transcription prompts.
 - **🧹 History Management**: Cleanly wipes uploaded files and generated transcripts.
+- **⏸️ Queue Controls**: Pause/resume batch processing, retry failed items, and move items to the top.
+- **🧾 Processing Logs**: Auto-saved JSON logs per job with preview/download in the UI.
 - **🎨 Premium Wide UI**: A modern, 1000px wide horizontal interface for efficient batch work.
 - **🛠️ Auto-Dependency Check**: Automatically installs missing Python packages on startup.
 - **🧪 Advanced Settings**: Optional Whisper model selection per batch.
@@ -108,7 +112,16 @@ Note: `requirements.txt` installs the default CPU build of PyTorch unless you ma
 3. Choose source/target languages and run **Translate SRT Files**.
 4. Download the translated and dual subtitles from **Get Files**.
 
-For SRT Translate, if a cue has two lines, the system always treats the **second line** as the source text and regenerates all outputs accordingly.
+For SRT Translate, if a cue has two lines, the system always treats the **second line** as the source text and regenerates all outputs accordingly. When the source language is set to **Auto**, it uses lightweight script detection to pick a sensible default (e.g. Latin → English, Han → Chinese).
+
+### Glossary
+
+Use the **Glossary** panel to keep terminology consistent across runs.
+
+- **Saved glossary** is stored at `data/glossary.json` and can be previewed/downloaded from the UI.
+- **Input + file upload** supports `term = translation` or `term -> translation` (one per line) and JSON glossary lists.
+- **Per-video glossary** can be appended and optionally saved to the global glossary.
+- **Infer terms from filename** adds keywords to the Whisper prompt for better transcription of names or topics.
 
 
 ## 📂 Project Structure
@@ -121,7 +134,9 @@ auto_caption_subtitle/
 ├── src/
 │   ├── config.py         # Central config: paths, Whisper model, cleanup, secret
 │   ├── dependency_manager.py  # Check/install deps (invoked at app startup)
+│   ├── glossary.py        # Glossary load/save/parse helpers
 │   ├── pipeline.py       # Video → audio → transcribe → translate → SRT
+│   ├── srt_utils.py       # SRT parsing + language hints
 │   ├── transcriber.py    # Whisper & SRT save helpers
 │   ├── translator.py     # Segment translation (deep-translator)
 │   └── video_processor.py    # FFmpeg video → audio
@@ -131,6 +146,8 @@ auto_caption_subtitle/
 │   ├── css/style.css     # Styles
 │   └── js/script.js      # Upload, NDJSON stream, progress, downloads
 └── data/                 # Auto-created; videos, audios, transcripts (git-ignored)
+  ├── glossary.json     # Saved glossary terms
+  └── transcripts/      # Subtitle outputs + JSON logs
 ```
 
 ## 📝 License
