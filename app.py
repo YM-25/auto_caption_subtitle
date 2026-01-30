@@ -18,6 +18,8 @@ import queue
 import secrets
 import shutil
 import threading
+import time
+from datetime import datetime
 
 from flask import Flask, render_template, request, send_file, jsonify, Response, stream_with_context
 from werkzeug.utils import secure_filename
@@ -28,8 +30,17 @@ from src.config import (
     ALLOWED_VIDEO_EXTENSIONS,
     MAX_UPLOAD_MB,
     CLEANUP_AFTER_PROCESS,
+    GLOSSARY_FILE,
 )
 from src.pipeline import process_video, process_srt
+from src.glossary import (
+    load_glossary,
+    save_glossary,
+    parse_glossary_text,
+    parse_glossary_file,
+    merge_glossaries,
+    infer_glossary_from_filename,
+)
 
 try:
     import torch
@@ -122,10 +133,60 @@ def upload_and_process():
     else:
         whisper_prompt = None
 
+    glossary_text = request.form.get("glossary_text", "").strip()
+    glossary_use_saved = request.form.get("glossary_use_saved", "1").strip() == "1"
+    glossary_save = request.form.get("glossary_save", "0").strip() == "1"
+    glossary_use_filename = request.form.get("glossary_use_filename", "1").strip() == "1"
+    glossary_mode = request.form.get("glossary_mode", "merge").strip()
+    glossary_prompt = request.form.get("glossary_prompt", "0").strip() == "1"
+
+    glossary_file = request.files.get("glossary_file")
+    glossary_file_path = None
+    if glossary_file and glossary_file.filename:
+        glossary_name = secure_filename(glossary_file.filename)
+        glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
+        glossary_file.save(glossary_file_path)
+
+    saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
+    text_glossary = parse_glossary_text(glossary_text)
+    file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
+    if glossary_mode == "replace":
+        merged_glossary = merge_glossaries(text_glossary, file_glossary)
+    else:
+        merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
+
+    if glossary_save and (text_glossary or file_glossary):
+        updated = merge_glossaries(saved_glossary, text_glossary, file_glossary)
+        save_glossary(GLOSSARY_FILE, updated)
+
+    if glossary_prompt and merged_glossary:
+        prompt_terms = ", ".join(sorted(merged_glossary.keys()))
+        if whisper_prompt:
+            whisper_prompt = f"{whisper_prompt}\nGlossary terms: {prompt_terms}"
+        else:
+            whisper_prompt = f"Glossary terms: {prompt_terms}"
+        whisper_prompt = whisper_prompt[:1000]
+
+    if glossary_use_filename:
+        inferred_glossary = infer_glossary_from_filename(filename)
+        if inferred_glossary:
+            inferred_terms = ", ".join(sorted(inferred_glossary.keys()))
+            if whisper_prompt:
+                whisper_prompt = f"{whisper_prompt}\nTopic keywords: {inferred_terms}"
+            else:
+                whisper_prompt = f"Topic keywords: {inferred_terms}"
+            whisper_prompt = whisper_prompt[:1000]
+
 
     def to_download_path(file_path):
         rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
         return rel_path.replace(os.sep, "/")
+
+    def build_log_paths(base_name):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"{base_name}.log.{timestamp}.json"
+        log_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], log_filename)
+        return log_path, f"/download/{to_download_path(log_path)}", f"/preview/{to_download_path(log_path)}"
 
     def generate():
         try:
@@ -133,10 +194,33 @@ def upload_and_process():
 
             q = queue.Queue()
 
+            log_data = {
+                "filename": filename,
+                "source_language": source_lang or "auto",
+                "target_language": target_lang or "none",
+                "whisper_model": whisper_model or "default",
+                "whisper_prompt": whisper_prompt or "",
+                "glossary_terms": sorted(list(merged_glossary.keys())),
+                "status": "processing",
+                "start_time": datetime.now().isoformat(),
+                "events": [],
+                "outputs": [],
+                "error": None,
+                "duration_sec": None,
+            }
+            start_ts = time.time()
+            log_path, log_download_url, log_preview_url = build_log_paths(os.path.splitext(filename)[0])
+
             def worker():
                 try:
-                    def cb(msg):
-                        q.put({"type": "progress", "message": msg})
+                    def cb(payload):
+                        if isinstance(payload, dict):
+                            log_data["events"].append(payload)
+                            q.put(payload)
+                        else:
+                            item = {"type": "progress", "message": payload}
+                            log_data["events"].append(item)
+                            q.put(item)
 
                     outputs = process_video(
                         save_path,
@@ -144,6 +228,7 @@ def upload_and_process():
                         target_lang=target_lang,
                         model_name=whisper_model,
                         initial_prompt=whisper_prompt,
+                        glossary=merged_glossary,
                         progress_callback=cb,
                     )
 
@@ -153,20 +238,49 @@ def upload_and_process():
                             "label": "Original Subtitles (.srt)",
                             "url": f"/download/{to_download_path(outputs['original'])}",
                         })
+                        log_data["outputs"].append(outputs["original"])
                     if "translated" in outputs:
                         result_files.append({
                             "label": "Translated Subtitles (.srt)",
                             "url": f"/download/{to_download_path(outputs['translated'])}",
                         })
+                        log_data["outputs"].append(outputs["translated"])
                     if "dual" in outputs:
                         result_files.append({
                             "label": "Bilingual Subtitles (Dual .srt)",
                             "url": f"/download/{to_download_path(outputs['dual'])}",
                         })
+                        log_data["outputs"].append(outputs["dual"])
 
-                    q.put({"type": "result", "files": result_files})
+                    log_data["status"] = "completed"
+                    log_data["duration_sec"] = round(time.time() - start_ts, 3)
+                    log_data["end_time"] = datetime.now().isoformat()
+                    try:
+                        with open(log_path, "w", encoding="utf-8") as f:
+                            json.dump(log_data, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+
+                    q.put({
+                        "type": "result",
+                        "files": result_files,
+                        "log": {"download_url": log_download_url, "preview_url": log_preview_url},
+                    })
                 except Exception as e:
-                    q.put({"type": "error", "message": str(e)})
+                    log_data["status"] = "failed"
+                    log_data["error"] = str(e)
+                    log_data["duration_sec"] = round(time.time() - start_ts, 3)
+                    log_data["end_time"] = datetime.now().isoformat()
+                    try:
+                        with open(log_path, "w", encoding="utf-8") as f:
+                            json.dump(log_data, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+                    q.put({
+                        "type": "error",
+                        "message": str(e),
+                        "log": {"download_url": log_download_url, "preview_url": log_preview_url},
+                    })
                 finally:
                     q.put(None)
 
@@ -229,9 +343,40 @@ def upload_srt_and_translate():
     elif not target_lang or target_lang == "none":
         target_lang = None
 
+    glossary_text = request.form.get("glossary_text", "").strip()
+    glossary_use_saved = request.form.get("glossary_use_saved", "1").strip() == "1"
+    glossary_save = request.form.get("glossary_save", "0").strip() == "1"
+    glossary_use_filename = request.form.get("glossary_use_filename", "1").strip() == "1"
+    glossary_mode = request.form.get("glossary_mode", "merge").strip()
+
+    glossary_file = request.files.get("glossary_file")
+    glossary_file_path = None
+    if glossary_file and glossary_file.filename:
+        glossary_name = secure_filename(glossary_file.filename)
+        glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
+        glossary_file.save(glossary_file_path)
+
+    saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
+    text_glossary = parse_glossary_text(glossary_text)
+    file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
+    if glossary_mode == "replace":
+        merged_glossary = merge_glossaries(text_glossary, file_glossary)
+    else:
+        merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
+
+    if glossary_save and (text_glossary or file_glossary):
+        updated = merge_glossaries(saved_glossary, text_glossary, file_glossary)
+        save_glossary(GLOSSARY_FILE, updated)
+
     def to_download_path(file_path):
         rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
         return rel_path.replace(os.sep, "/")
+
+    def build_log_paths(base_name):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"{base_name}.log.{timestamp}.json"
+        log_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], log_filename)
+        return log_path, f"/download/{to_download_path(log_path)}", f"/preview/{to_download_path(log_path)}"
 
     def generate():
         try:
@@ -239,15 +384,38 @@ def upload_srt_and_translate():
 
             q = queue.Queue()
 
+            log_data = {
+                "filename": filename,
+                "source_language": source_lang or "auto",
+                "target_language": target_lang or "none",
+                "mode": "srt_translate",
+                "glossary_terms": sorted(list(merged_glossary.keys())),
+                "status": "processing",
+                "start_time": datetime.now().isoformat(),
+                "events": [],
+                "outputs": [],
+                "error": None,
+                "duration_sec": None,
+            }
+            start_ts = time.time()
+            log_path, log_download_url, log_preview_url = build_log_paths(base_name)
+
             def worker():
                 try:
-                    def cb(msg):
-                        q.put({"type": "progress", "message": msg})
+                    def cb(payload):
+                        if isinstance(payload, dict):
+                            log_data["events"].append(payload)
+                            q.put(payload)
+                        else:
+                            item = {"type": "progress", "message": payload}
+                            log_data["events"].append(item)
+                            q.put(item)
 
                     outputs = process_srt(
                         save_path,
                         source_lang=source_lang,
                         target_lang=target_lang,
+                        glossary=merged_glossary,
                         progress_callback=cb,
                     )
 
@@ -257,20 +425,49 @@ def upload_srt_and_translate():
                             "label": "Original Subtitles (.srt)",
                             "url": f"/download/{to_download_path(outputs['original'])}",
                         })
+                        log_data["outputs"].append(outputs["original"])
                     if "translated" in outputs:
                         result_files.append({
                             "label": "Translated Subtitles (.srt)",
                             "url": f"/download/{to_download_path(outputs['translated'])}",
                         })
+                        log_data["outputs"].append(outputs["translated"])
                     if "dual" in outputs:
                         result_files.append({
                             "label": "Bilingual Subtitles (Dual .srt)",
                             "url": f"/download/{to_download_path(outputs['dual'])}",
                         })
+                        log_data["outputs"].append(outputs["dual"])
 
-                    q.put({"type": "result", "files": result_files})
+                    log_data["status"] = "completed"
+                    log_data["duration_sec"] = round(time.time() - start_ts, 3)
+                    log_data["end_time"] = datetime.now().isoformat()
+                    try:
+                        with open(log_path, "w", encoding="utf-8") as f:
+                            json.dump(log_data, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+
+                    q.put({
+                        "type": "result",
+                        "files": result_files,
+                        "log": {"download_url": log_download_url, "preview_url": log_preview_url},
+                    })
                 except Exception as e:
-                    q.put({"type": "error", "message": str(e)})
+                    log_data["status"] = "failed"
+                    log_data["error"] = str(e)
+                    log_data["duration_sec"] = round(time.time() - start_ts, 3)
+                    log_data["end_time"] = datetime.now().isoformat()
+                    try:
+                        with open(log_path, "w", encoding="utf-8") as f:
+                            json.dump(log_data, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+                    q.put({
+                        "type": "error",
+                        "message": str(e),
+                        "log": {"download_url": log_download_url, "preview_url": log_preview_url},
+                    })
                 finally:
                     q.put(None)
 
@@ -297,6 +494,15 @@ def download_file(filename):
     if not path.startswith(root) or not os.path.isfile(path):
         return jsonify({"error": "File not found"}), 404
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+
+
+@app.route("/preview/<path:filename>")
+def preview_file(filename):
+    root = os.path.abspath(app.config["TRANSCRIPT_FOLDER"])
+    path = os.path.abspath(os.path.join(root, filename))
+    if not path.startswith(root) or not os.path.isfile(path):
+        return jsonify({"error": "File not found"}), 404
+    return send_file(path, as_attachment=False)
 
 
 @app.route("/clear_history", methods=["POST"])

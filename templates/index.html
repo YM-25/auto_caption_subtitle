@@ -71,6 +71,15 @@
                         <span class="loader"></span>
                     </button>
 
+                    <div class="queue-controls">
+                        <button id="pause-all-btn" class="secondary-btn" type="button">
+                            <i class="fa-solid fa-pause"></i> Pause All
+                        </button>
+                        <button id="resume-all-btn" class="secondary-btn" type="button" style="display: none;">
+                            <i class="fa-solid fa-play"></i> Resume All
+                        </button>
+                    </div>
+
                     <button id="clear-btn" class="secondary-btn">
                         <i class="fa-solid fa-trash"></i> Clear All History (Files & Cache)
                     </button>
@@ -96,6 +105,43 @@
                     <div class="setting-group">
                         <label for="prompt-input"><i class="fa-solid fa-pen-nib"></i> Initial Prompt (Names, Topics)</label>
                         <textarea id="prompt-input" rows="3" placeholder="Optional: key names, places, domain terms"></textarea>
+                        <div class="prompt-actions">
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="glossary-use-filename" checked>
+                                Infer terms from filename
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="glossary-text"><i class="fa-solid fa-book"></i> Glossary (term=translation)</label>
+                        <textarea id="glossary-text" rows="4" placeholder="Example:\nAPI=API\nAutoCaption Pro=AutoCaption Pro"></textarea>
+                        <div class="helper-text">Supports term=translation, term->translation, or term,translation per line.</div>
+                        <div class="glossary-actions">
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="glossary-use-saved" checked>
+                                Use saved glossary
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="glossary-save">
+                                Save input to glossary
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="glossary-use-prompt">
+                                Inject glossary into Whisper prompt
+                            </label>
+                        </div>
+                        <div class="setting-group">
+                            <label for="glossary-file">Upload Glossary (CSV/JSON/TXT)</label>
+                            <input type="file" id="glossary-file" accept=".csv,.json,.txt">
+                        </div>
+                        <div class="setting-group">
+                            <label for="glossary-mode">Glossary Merge Mode</label>
+                            <select id="glossary-mode">
+                                <option value="merge">Merge with saved</option>
+                                <option value="replace">Replace saved (this batch only)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -144,6 +190,21 @@
         <footer>
             <p>&copy; 2026 AutoCaption Pro. Built with <i class="fa-solid fa-heart"></i> and AI.</p>
         </footer>
+    </div>
+
+    <div class="modal" id="log-modal" aria-hidden="true">
+        <div class="modal-backdrop" id="log-modal-backdrop"></div>
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
+            <div class="modal-header">
+                <h3 id="log-modal-title">Processing Log</h3>
+                <button class="modal-close" id="log-modal-close" type="button">&times;</button>
+            </div>
+            <pre id="log-modal-content" class="modal-body">Loading...</pre>
+            <div class="modal-actions">
+                <button id="log-modal-download" class="primary-btn" type="button">Download Log</button>
+                <button id="log-modal-dismiss" class="secondary-btn" type="button">Close</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>

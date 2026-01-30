@@ -23,6 +23,12 @@ def get_data_paths(base_dir=None):
 
 
 # -----------------------------------------------------------------------------
+# Glossary storage (local persisted)
+# -----------------------------------------------------------------------------
+GLOSSARY_FILE = os.path.join(BASE_DIR, "data", "glossary.json")
+
+
+# -----------------------------------------------------------------------------
 # Whisper model (balance of speed vs accuracy)
 # Options: tiny, base, small, medium, large, large-v2, large-v3
 # -----------------------------------------------------------------------------

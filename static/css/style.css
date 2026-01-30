@@ -281,14 +281,17 @@ header .helper-text {
     display: flex;
     gap: 0.8rem;
     flex: 3;
+    flex-wrap: nowrap;
+    width: 100%;
 }
 
 
 .video-item-settings .setting-group {
-    flex: 1;
+    flex: 1 1 240px;
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
 }
 
 .video-item-settings .setting-group label {
@@ -300,6 +303,7 @@ header .helper-text {
 .video-item-settings select {
     padding: 0.5rem;
     font-size: 0.85rem;
+    width: 100%;
 }
 
 .video-progress {
@@ -354,6 +358,19 @@ header .helper-text {
     font-size: 0.75rem;
     color: var(--text-muted);
     margin-top: 0.4rem;
+}
+
+.queue-controls {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 1.4rem;
+}
+
+.queue-controls .secondary-btn {
+    width: auto;
+    margin-top: 0;
 }
 
 .device-status {
@@ -427,6 +444,74 @@ textarea {
 }
 
 textarea:focus {
+    border-color: var(--primary);
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.prompt-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.glossary-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: nowrap;
+    margin: 0.6rem 0 0.4rem;
+}
+
+.video-actions-row {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    padding-left: 2.2rem;
+    margin-top: 0.8rem;
+    align-items: center;
+}
+
+.video-actions-row button {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.video-actions-row button i {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.video-actions-row button:hover {
+    border-color: var(--primary);
+}
+
+.log-button {
+    margin-top: 0.5rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.log-button:hover {
     border-color: var(--primary);
 }
 
@@ -537,6 +622,20 @@ button#process-btn:disabled {
     background: rgba(255, 118, 117, 0.1);
     border-color: #ff7675;
     box-shadow: 0 8px 20px rgba(255, 118, 117, 0.2);
+}
+
+.primary-btn {
+    padding: 0.8rem 1rem;
+    background: linear-gradient(135deg, #6c5ce7, #8e7bff);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.primary-btn:hover {
+    opacity: 0.9;
 }
 
 /* Global batch progress (shown by script.js during processing) */
@@ -703,6 +802,69 @@ footer i {
     color: #ff7675;
 }
 
+.modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.modal-content {
+    position: relative;
+    background: #1c1c24;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    width: min(900px, 90vw);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    z-index: 1;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.modal-body {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 8px;
+    color: var(--text-muted);
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.8rem;
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 1.5rem;
@@ -716,5 +878,13 @@ footer i {
     .settings-card,
     .result-card {
         padding: 1.5rem;
+    }
+
+    .video-item-settings {
+        flex-wrap: wrap;
+    }
+
+    .glossary-actions {
+        flex-wrap: wrap;
     }
 }

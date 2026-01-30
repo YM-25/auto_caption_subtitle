@@ -24,8 +24,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const srtProcessBtn = document.getElementById('srt-process-btn');
     const modeTabs = document.querySelectorAll('.mode-tab');
     const modePanels = document.querySelectorAll('.mode-panel');
+    const pauseAllBtn = document.getElementById('pause-all-btn');
+    const resumeAllBtn = document.getElementById('resume-all-btn');
+    const glossaryText = document.getElementById('glossary-text');
+    const glossaryUseSaved = document.getElementById('glossary-use-saved');
+    const glossarySave = document.getElementById('glossary-save');
+    const glossaryUseFilename = document.getElementById('glossary-use-filename');
+    const glossaryUsePrompt = document.getElementById('glossary-use-prompt');
+    const glossaryFile = document.getElementById('glossary-file');
+    const glossaryMode = document.getElementById('glossary-mode');
+    const logModal = document.getElementById('log-modal');
+    const logModalContent = document.getElementById('log-modal-content');
+    const logModalDownload = document.getElementById('log-modal-download');
+    const logModalClose = document.getElementById('log-modal-close');
+    const logModalDismiss = document.getElementById('log-modal-dismiss');
+    const logModalBackdrop = document.getElementById('log-modal-backdrop');
 
-    /** @type {{ file: File, id: string, status: string, results: Array<{label:string,url:string}>|null }[]} */
+    /** @type {{ file: File, id: string, status: string, results: Array<{label:string,url:string}>|null, log: {download_url:string, preview_url:string}|null }[]} */
     let videoQueue = [];
     const heavyModels = new Set(['medium', 'large', 'large-v2', 'large-v3']);
 
@@ -54,8 +69,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modelSelect) {
         modelSelect.addEventListener('change', () => warnIfNoCuda(modelSelect.value));
     }
-    /** @type {{ file: File, id: string, status: string, results: Array<{label:string,url:string}>|null }[]} */
+    /** @type {{ file: File, id: string, status: string, results: Array<{label:string,url:string}>|null, log: {download_url:string, preview_url:string}|null }[]} */
     let srtQueue = [];
+    let queuePaused = false;
+    let resumeQueueResolve = null;
 
     function setActiveMode(mode) {
         modeTabs.forEach((tab) => {
@@ -69,6 +86,63 @@ document.addEventListener('DOMContentLoaded', () => {
     modeTabs.forEach((tab) => {
         tab.addEventListener('click', () => setActiveMode(tab.dataset.mode));
     });
+
+    function setQueuePaused(paused) {
+        queuePaused = paused;
+        if (pauseAllBtn && resumeAllBtn) {
+            pauseAllBtn.style.display = paused ? 'none' : 'inline-flex';
+            resumeAllBtn.style.display = paused ? 'inline-flex' : 'none';
+        }
+        if (!paused && resumeQueueResolve) {
+            resumeQueueResolve();
+            resumeQueueResolve = null;
+        }
+    }
+
+    async function waitForResume() {
+        if (!queuePaused) return;
+        await new Promise((resolve) => {
+            resumeQueueResolve = resolve;
+        });
+    }
+
+    if (pauseAllBtn) {
+        pauseAllBtn.addEventListener('click', () => {
+            setQueuePaused(true);
+            videoQueue.forEach((video) => {
+                if (video.status === 'pending') {
+                    video.status = 'paused';
+                    const itemEl = document.getElementById(`video-${video.id}`);
+                    if (itemEl) {
+                        const pauseBtn = itemEl.querySelector('.pause-btn');
+                        const resumeBtn = itemEl.querySelector('.resume-btn');
+                        if (pauseBtn) pauseBtn.style.display = 'none';
+                        if (resumeBtn) resumeBtn.style.display = 'inline-flex';
+                    }
+                }
+            });
+            updateUIState();
+        });
+    }
+
+    if (resumeAllBtn) {
+        resumeAllBtn.addEventListener('click', () => {
+            setQueuePaused(false);
+            videoQueue.forEach((video) => {
+                if (video.status === 'paused') {
+                    video.status = 'pending';
+                    const itemEl = document.getElementById(`video-${video.id}`);
+                    if (itemEl) {
+                        const pauseBtn = itemEl.querySelector('.pause-btn');
+                        const resumeBtn = itemEl.querySelector('.resume-btn');
+                        if (pauseBtn) pauseBtn.style.display = 'inline-flex';
+                        if (resumeBtn) resumeBtn.style.display = 'none';
+                    }
+                }
+            });
+            updateUIState();
+        });
+    }
 
     // —— Drag & Drop ——
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
@@ -135,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 id: videoId,
                 status: 'pending',
                 results: null,
+                log: null,
             });
             addVideoToUI(videoQueue[videoQueue.length - 1]);
         });
@@ -150,6 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 id: srtId,
                 status: 'pending',
                 results: null,
+                log: null,
             });
             addSrtToUI(srtQueue[srtQueue.length - 1]);
         });
@@ -221,14 +297,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     <label>Initial Prompt (Override):</label>
                     <textarea class="video-prompt-input" rows="2" placeholder="Optional: names, places, terms"></textarea>
                 </div>
+                <div class="setting-group">
+                    <label class="checkbox-row">
+                        <input type="checkbox" class="video-infer-checkbox" data-default="batch">
+                        Infer terms from filename (use batch by default)
+                    </label>
+                </div>
+            </div>
+            <div class="video-actions-row">
+                <button class="pause-btn" type="button"><i class="fa-solid fa-pause"></i> Pause</button>
+                <button class="resume-btn" type="button" style="display:none;"><i class="fa-solid fa-play"></i> Resume</button>
+                <button class="retry-btn" type="button"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+                <button class="top-btn" type="button"><i class="fa-solid fa-arrow-up"></i> Move to Top</button>
             </div>
             <div class="video-progress" id="progress-${video.id}">Waiting for processing...</div>
             <div class="video-results" id="results-${video.id}"></div>
+            <button class="log-button" id="log-${video.id}" type="button" style="display:none;">View Log</button>
         `;
 
         const toggle = item.querySelector('.video-advanced-toggle');
         const advancedFields = item.querySelector('.video-advanced-fields');
         const videoModelSelect = item.querySelector('.video-model-select');
+        const videoInferCheckbox = item.querySelector('.video-infer-checkbox');
         if (toggle && advancedFields) {
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -243,6 +333,81 @@ document.addEventListener('DOMContentLoaded', () => {
                     warnIfNoCuda(videoModelSelect.value);
                 } else if (modelSelect) {
                     warnIfNoCuda(modelSelect.value);
+                }
+            });
+        }
+
+        if (videoInferCheckbox) {
+            videoInferCheckbox.indeterminate = true;
+            videoInferCheckbox.dataset.mode = 'batch';
+            videoInferCheckbox.addEventListener('change', () => {
+                videoInferCheckbox.indeterminate = false;
+                videoInferCheckbox.dataset.mode = 'override';
+            });
+        }
+
+        const pauseBtn = item.querySelector('.pause-btn');
+        const resumeBtn = item.querySelector('.resume-btn');
+        const retryBtn = item.querySelector('.retry-btn');
+        const topBtn = item.querySelector('.top-btn');
+
+        if (pauseBtn) {
+            pauseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.status === 'processing') {
+                    setQueuePaused(true);
+                    const progressEl = document.getElementById(`progress-${video.id}`);
+                    if (progressEl) progressEl.textContent = 'Pause requested. Will stop after current item.';
+                } else if (video.status !== 'completed') {
+                    video.status = 'paused';
+                    pauseBtn.style.display = 'none';
+                    if (resumeBtn) resumeBtn.style.display = 'inline-flex';
+                }
+                updateUIState();
+            });
+        }
+
+        if (resumeBtn) {
+            resumeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.status === 'paused') {
+                    video.status = 'pending';
+                    resumeBtn.style.display = 'none';
+                    if (pauseBtn) pauseBtn.style.display = 'inline-flex';
+                    updateUIState();
+                }
+            });
+        }
+
+        if (retryBtn) {
+            retryBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.status === 'failed') {
+                    video.status = 'pending';
+                    video.results = null;
+                    video.log = null;
+                    const resultsEl = document.getElementById(`results-${video.id}`);
+                    if (resultsEl) resultsEl.innerHTML = '';
+                    const logBtn = document.getElementById(`log-${video.id}`);
+                    if (logBtn) logBtn.style.display = 'none';
+                    updateUIState();
+                }
+            });
+        }
+
+        if (topBtn) {
+            topBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                moveVideoToTop(video.id);
+            });
+        }
+
+        const logBtn = item.querySelector(`#log-${video.id}`);
+        if (logBtn) {
+            logBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (video.log) {
+                    openLogModal(video.log.preview_url, video.log.download_url);
                 }
             });
         }
@@ -298,8 +463,19 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="video-progress" id="progress-srt-${srtItem.id}">Waiting for processing...</div>
             <div class="video-results" id="results-srt-${srtItem.id}"></div>
+            <button class="log-button" id="log-srt-${srtItem.id}" type="button" style="display:none;">View Log</button>
             <i class="fa-solid fa-xmark remove-video-btn" data-id="${srtItem.id}" title="Remove SRT"></i>
         `;
+
+        const logBtn = item.querySelector(`#log-srt-${srtItem.id}`);
+        if (logBtn) {
+            logBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (srtItem.log) {
+                    openLogModal(srtItem.log.preview_url, srtItem.log.download_url);
+                }
+            });
+        }
 
         item.querySelector('.remove-video-btn').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -322,6 +498,17 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUIState();
     }
 
+    function moveVideoToTop(id) {
+        const index = videoQueue.findIndex((v) => v.id === id);
+        if (index <= 0) return;
+        const [item] = videoQueue.splice(index, 1);
+        videoQueue.unshift(item);
+        const el = document.getElementById(`video-${id}`);
+        if (el && videoList) {
+            videoList.prepend(el);
+        }
+    }
+
     function removeSrt(id) {
         srtQueue = srtQueue.filter((v) => v.id !== id);
         const el = document.getElementById(`srt-${id}`);
@@ -334,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadContent.style.padding = '1rem';
             uploadContent.querySelector('h3').textContent = 'Add More Videos';
             globalActions.style.display = 'block';
-            processBtn.disabled = videoQueue.every((v) => v.status === 'completed');
+            processBtn.disabled = videoQueue.every((v) => v.status === 'completed' || v.status === 'paused');
         } else {
             uploadContent.style.padding = '3rem 2rem';
             uploadContent.querySelector('h3').textContent = 'Drag & Drop Video Here';
@@ -353,7 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     processBtn.addEventListener('click', async () => {
-        const toProcess = videoQueue.filter((v) => v.status !== 'completed' && v.status !== 'processing');
+        const toProcess = videoQueue.filter((v) => v.status !== 'completed' && v.status !== 'processing' && v.status !== 'paused');
         if (toProcess.length === 0) return;
 
         processBtn.disabled = true;
@@ -370,6 +557,13 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             for (const video of videoQueue) {
                 if (video.status === 'completed' || video.status === 'processing') continue;
+                if (video.status === 'paused') continue;
+                if (queuePaused) {
+                    if (progressArea && progressText) {
+                        progressText.textContent = 'Queue paused. Waiting to resume...';
+                    }
+                    await waitForResume();
+                }
                 current += 1;
                 if (progressArea && progressText) {
                     progressText.textContent = `Processing ${current} of ${total}: ${video.file.name}`;
@@ -438,6 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetSelect = itemEl.querySelector('.target-lang-select');
         const videoModelSelect = itemEl.querySelector('.video-model-select');
         const videoPromptInput = itemEl.querySelector('.video-prompt-input');
+        const videoInferCheckbox = itemEl.querySelector('.video-infer-checkbox');
 
         video.status = 'processing';
         progressEl.style.display = 'block';
@@ -449,6 +644,21 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', video.file);
         formData.append('source_language', sourceSelect.value);
         formData.append('target_language', targetSelect.value);
+        formData.append('glossary_text', glossaryText ? glossaryText.value : '');
+        formData.append('glossary_use_saved', glossaryUseSaved && glossaryUseSaved.checked ? '1' : '0');
+        formData.append('glossary_save', glossarySave && glossarySave.checked ? '1' : '0');
+        if (videoInferCheckbox && videoInferCheckbox.dataset.mode === 'override') {
+            formData.append('glossary_use_filename', videoInferCheckbox.checked ? '1' : '0');
+        } else if (videoInferCheckbox) {
+            formData.append('glossary_use_filename', glossaryUseFilename && glossaryUseFilename.checked ? '1' : '0');
+        } else {
+            formData.append('glossary_use_filename', glossaryUseFilename && glossaryUseFilename.checked ? '1' : '0');
+        }
+        formData.append('glossary_prompt', glossaryUsePrompt && glossaryUsePrompt.checked ? '1' : '0');
+        formData.append('glossary_mode', glossaryMode ? glossaryMode.value : 'merge');
+        if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
+            formData.append('glossary_file', glossaryFile.files[0]);
+        }
         const batchModel = modelSelect ? modelSelect.value : 'auto';
         const batchPrompt = promptInput ? promptInput.value : '';
         if (videoModelSelect && videoModelSelect.value !== 'batch') {
@@ -492,16 +702,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (data.type === 'result') {
                         video.status = 'completed';
                         video.results = data.files;
+                        if (data.log) {
+                            video.log = data.log;
+                            showLogButton(video.id);
+                        }
                         displayVideoResults(video);
                         progressEl.style.display = 'none';
                     } else if (data.type === 'error') {
+                        if (data.log) {
+                            video.log = data.log;
+                            showLogButton(video.id);
+                            openLogModal(data.log.preview_url, data.log.download_url);
+                        }
                         throw new Error(data.message || 'Processing failed');
                     }
                 }
             }
         } catch (error) {
             console.error(error);
-            video.status = 'error';
+            video.status = 'failed';
             progressEl.textContent = `Error: ${error.message}`;
             progressEl.style.display = 'block';
             sourceSelect.disabled = false;
@@ -529,6 +748,14 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', srtItem.file);
         formData.append('source_language', sourceSelect.value);
         formData.append('target_language', targetSelect.value);
+        formData.append('glossary_text', glossaryText ? glossaryText.value : '');
+        formData.append('glossary_use_saved', glossaryUseSaved && glossaryUseSaved.checked ? '1' : '0');
+        formData.append('glossary_save', glossarySave && glossarySave.checked ? '1' : '0');
+        formData.append('glossary_use_filename', glossaryUseFilename && glossaryUseFilename.checked ? '1' : '0');
+        formData.append('glossary_mode', glossaryMode ? glossaryMode.value : 'merge');
+        if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
+            formData.append('glossary_file', glossaryFile.files[0]);
+        }
 
         try {
             const response = await fetch('/upload_srt_and_translate', { method: 'POST', body: formData });
@@ -559,16 +786,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (data.type === 'result') {
                         srtItem.status = 'completed';
                         srtItem.results = data.files;
+                        if (data.log) {
+                            srtItem.log = data.log;
+                            showLogButton(`srt-${srtItem.id}`);
+                        }
                         displaySrtResults(srtItem);
                         progressEl.style.display = 'none';
                     } else if (data.type === 'error') {
+                        if (data.log) {
+                            srtItem.log = data.log;
+                            showLogButton(`srt-${srtItem.id}`);
+                            openLogModal(data.log.preview_url, data.log.download_url);
+                        }
                         throw new Error(data.message || 'Processing failed');
                     }
                 }
             }
         } catch (error) {
             console.error(error);
-            srtItem.status = 'error';
+            srtItem.status = 'failed';
             progressEl.textContent = `Error: ${error.message}`;
             progressEl.style.display = 'block';
             sourceSelect.disabled = false;
@@ -646,6 +882,43 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    function showLogButton(id) {
+        const btn = document.getElementById(`log-${id}`);
+        if (btn) {
+            btn.style.display = 'inline-flex';
+        }
+    }
+
+    function openLogModal(previewUrl, downloadUrl) {
+        if (!logModal || !logModalContent) return;
+        logModal.classList.add('active');
+        logModal.setAttribute('aria-hidden', 'false');
+        logModalContent.textContent = 'Loading...';
+        if (logModalDownload) {
+            logModalDownload.onclick = () => {
+                window.open(downloadUrl, '_blank');
+            };
+        }
+        fetch(previewUrl)
+            .then((res) => res.text())
+            .then((text) => {
+                logModalContent.textContent = text;
+            })
+            .catch(() => {
+                logModalContent.textContent = 'Failed to load log preview.';
+            });
+    }
+
+    function closeLogModal() {
+        if (!logModal) return;
+        logModal.classList.remove('active');
+        logModal.setAttribute('aria-hidden', 'true');
+    }
+
+    if (logModalClose) logModalClose.addEventListener('click', closeLogModal);
+    if (logModalDismiss) logModalDismiss.addEventListener('click', closeLogModal);
+    if (logModalBackdrop) logModalBackdrop.addEventListener('click', closeLogModal);
 
     document.addEventListener('click', () => {
         document.querySelectorAll('.download-dropdown').forEach((d) => d.classList.remove('show-dropdown'));
