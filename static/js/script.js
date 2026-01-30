@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadContent = document.querySelector('.upload-content');
     const progressArea = document.getElementById('progress-area');
     const progressText = document.getElementById('progress-text');
+    const modelSelect = document.getElementById('model-select');
 
     /** @type {{ file: File, id: string, status: string, results: Array<{label:string,url:string}>|null }[]} */
     let videoQueue = [];
@@ -200,6 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('file', video.file);
         formData.append('source_language', sourceSelect.value);
         formData.append('target_language', targetSelect.value);
+        if (modelSelect) {
+            formData.append('whisper_model', modelSelect.value);
+        }
 
         try {
             const response = await fetch('/upload_and_process', { method: 'POST', body: formData });
@@ -244,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
             progressEl.style.display = 'block';
             sourceSelect.disabled = false;
             targetSelect.disabled = false;
+            alert(`Processing failed:\n${error.message}`);
         }
     }
 

@@ -67,4 +67,4 @@ def get_secret_key():
 
 
 ALLOWED_VIDEO_EXTENSIONS = {"mp4", "avi", "mov", "mkv"}
-MAX_UPLOAD_MB = 500
+MAX_UPLOAD_MB = 5120

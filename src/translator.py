@@ -18,9 +18,14 @@ def translate_segments(segments, target_lang="en"):
         List of segment dicts with 'text' replaced by translated text.
     """
     translated_segments = []
-    print(f"Translating {len(segments)} segments to '{target_lang}'...")
+    effective_target = target_lang
+    if target_lang in ("en-GB", "en-UK"):
+        effective_target = "en"
+        print(f"Target language '{target_lang}' not supported by translator. Using '{effective_target}' instead.")
 
-    translator = GoogleTranslator(source="auto", target=target_lang)
+    print(f"Translating {len(segments)} segments to '{effective_target}'...")
+
+    translator = GoogleTranslator(source="auto", target=effective_target)
 
     # One-by-one to preserve 1:1 mapping for dual SRT; empty segments kept as-is.
     for i, segment in enumerate(segments):

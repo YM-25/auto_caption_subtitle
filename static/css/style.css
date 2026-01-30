@@ -236,6 +236,7 @@ header {
     flex: 3;
 }
 
+
 .video-item-settings .setting-group {
     flex: 1;
     display: flex;
@@ -294,6 +295,14 @@ header {
     gap: 1.5rem;
 }
 
+.settings-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
 .info-box {
     background: rgba(108, 92, 231, 0.1);
     border: 1px solid rgba(108, 92, 231, 0.2);
@@ -344,6 +353,7 @@ select {
 select:focus {
     border-color: var(--primary);
 }
+
 
 button#process-btn {
     width: 100%;

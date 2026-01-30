@@ -35,7 +35,7 @@
                     <i class="fa-solid fa-cloud-arrow-up icon"></i>
                     <h3>Drag & Drop Video Here</h3>
                     <p>or <span class="browse-btn">Browse Files</span></p>
-                    <p class="upload-hint">Supports MP4, AVI, MOV, MKV • Best under 2 GB</p>
+                    <p class="upload-hint">Supports MP4, AVI, MOV, MKV • Best under 5 GB</p>
                     <input type="file" id="file-input" accept=".mp4,.avi,.mov,.mkv" multiple hidden>
                 </div>
                 <div class="file-info" id="file-info" style="display: none;">
@@ -67,6 +67,23 @@
                 <button id="clear-btn" class="secondary-btn">
                     <i class="fa-solid fa-trash"></i> Clear All History (Files & Cache)
                 </button>
+            </div>
+
+            <div class="settings-card" id="advanced-settings">
+                <h3 class="settings-title">Advanced Settings</h3>
+                <div class="setting-group">
+                    <label for="model-select"><i class="fa-solid fa-microchip"></i> Whisper Model</label>
+                    <select id="model-select">
+                        <option value="auto">Auto (Server Default)</option>
+                        <option value="tiny">tiny</option>
+                        <option value="base">base</option>
+                        <option value="small">small</option>
+                        <option value="medium">medium</option>
+                        <option value="large">large</option>
+                        <option value="large-v2">large-v2</option>
+                        <option value="large-v3">large-v3</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Global batch progress (shown while processing; updated by script.js) -->

@@ -93,6 +93,18 @@ def upload_and_process():
     elif not target_lang or target_lang == "none":
         target_lang = None
 
+    whisper_model = request.form.get("whisper_model", "auto").strip()
+    allowed_models = {"auto", "tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}
+    if whisper_model not in allowed_models:
+        return jsonify({"error": "Invalid model selection"}), 400
+    if whisper_model == "auto":
+        whisper_model = None
+
+
+    def to_download_path(file_path):
+        rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
+        return rel_path.replace(os.sep, "/")
+
     def generate():
         try:
             yield json.dumps({"type": "progress", "message": f"File uploaded: {filename}"}) + "\n"
@@ -108,6 +120,7 @@ def upload_and_process():
                         save_path,
                         source_lang=source_lang,
                         target_lang=target_lang,
+                        model_name=whisper_model,
                         progress_callback=cb,
                     )
 
@@ -115,17 +128,17 @@ def upload_and_process():
                     if "original" in outputs:
                         result_files.append({
                             "label": "Original Subtitles (.srt)",
-                            "url": f"/download/{os.path.basename(outputs['original'])}",
+                            "url": f"/download/{to_download_path(outputs['original'])}",
                         })
                     if "translated" in outputs:
                         result_files.append({
                             "label": "Translated Subtitles (.srt)",
-                            "url": f"/download/{os.path.basename(outputs['translated'])}",
+                            "url": f"/download/{to_download_path(outputs['translated'])}",
                         })
                     if "dual" in outputs:
                         result_files.append({
                             "label": "Bilingual Subtitles (Dual .srt)",
-                            "url": f"/download/{os.path.basename(outputs['dual'])}",
+                            "url": f"/download/{to_download_path(outputs['dual'])}",
                         })
 
                     q.put({"type": "result", "files": result_files})
