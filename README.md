@@ -31,7 +31,7 @@ This tool runs fully **locally**. You need a local Python installation and requi
 - **🧹 History Management**: Cleanly wipes uploaded files and generated transcripts.
 - **⏸️ Queue Controls**: Pause/resume batch processing, retry failed items, and move items to the top.
 - **🧾 Processing Logs**: Auto-saved JSON logs per job with preview/download in the UI.
-- **🎨 Premium Wide UI**: A modern, 1000px wide horizontal interface for efficient batch work.
+- **🎨 Premium Wide UI**: A modern, 1080px wide horizontal interface for efficient batch work.
 - **🛠️ Auto-Dependency Check**: Automatically installs missing Python packages on startup.
 - **🧪 Advanced Settings**: Optional Whisper model selection per batch.
 - **📝 Per-Video Overrides**: You can override model and initial prompt per video.
