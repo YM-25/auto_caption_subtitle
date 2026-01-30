@@ -1,6 +1,14 @@
-# AutoCaption Pro 🎥📝
+<div align="center">
+  <h1>AutoCaption Pro 🎥📝</h1>
+  <p><em>Vibe your subtitles like vibing code.</em></p>
+  <p><strong>English</strong> | 中文 (coming soon)</p>
+</div>
+
+---
 
 **AutoCaption Pro** is an intelligent, web-based tool designed to automatically generate, translate, and synchronize subtitles for your videos. Powered by OpenAI's **Whisper** model for state-of-the-art speech recognition and **Deep Translator** for multilingual support.
+
+This tool runs fully **locally**. You need a local Python installation and required packages.
 
 
 ## ✨ Features
@@ -17,10 +25,12 @@
   - `*.{source}.srt`: Original language subtitles (e.g. `.zh-cn`).
   - `*.{source}__{target}.srt`: Translated subtitles (e.g. `.zh-cn__en-gb`).
   - `*.{source}__{target}.dual.srt`: **Bilingual subtitles** (Target on top, Source on bottom).
+- **🧾 SRT Translate Mode**: Upload edited SRT files and generate translated + bilingual outputs.
 - **🧹 History Management**: Cleanly wipes uploaded files and generated transcripts.
 - **🎨 Premium Wide UI**: A modern, 1000px wide horizontal interface for efficient batch work.
 - **🛠️ Auto-Dependency Check**: Automatically installs missing Python packages on startup.
 - **🧪 Advanced Settings**: Optional Whisper model selection per batch.
+- **📝 Per-Video Overrides**: You can override model and initial prompt per video.
 
 ## 🚀 Getting Started
 
@@ -38,15 +48,33 @@
    cd auto_caption_subtitle
    ```
 
-2. **Run the Application**:
+2. **Install dependencies**:
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+3. **Run the Application**:
    ```bash
    python app.py
    ```
    *The app will automatically check and install all required dependencies from `requirements.txt` on its first run.*
 
-3. **Open your browser** and navigate to: `http://127.0.0.1:5000`
+4. **Open your browser** and navigate to: `http://127.0.0.1:5000`
 
 ### Optional configuration
+
+#### Virtual Environment (Recommended)
+
+Create a virtual environment:
+```bash
+python -m venv .venv
+```
+
+Activate it:
+- Windows: `.\.venv\Scripts\activate`
+- macOS/Linux: `source .venv/bin/activate`
+
+#### Environment Variables (.env)
 
 Copy `.env.example` to `.env` and set variables as needed:
 
@@ -58,14 +86,29 @@ Copy `.env.example` to `.env` and set variables as needed:
 | `PORT` | Server port (default: `5000`). |
 | `FLASK_DEBUG` | Set to `1` to enable debug mode. |
 
+#### CUDA Acceleration (Optional)
+
+To use CUDA acceleration, install a CUDA-enabled PyTorch build that matches your GPU/driver.
+If you choose larger Whisper models (e.g. `medium`/`large`), GPU/CUDA is strongly recommended.
+Note: `requirements.txt` installs the default CPU build of PyTorch unless you manually install a CUDA-enabled build.
+
 ## 🏃 Usage
 
 1. **Upload**: Drag and drop multiple video files onto the upload area.
 2. **Configure**: Set individual **Source** and **Target** languages for each video in the horizontal list (including Simplified/Traditional Chinese).
-3. **Advanced (Optional)**: Choose a Whisper model to balance speed vs accuracy for the batch.
+3. **Advanced (Optional)**: Choose a Whisper model and prompt for the batch; per-video overrides are available inside each item.
 4. **Process**: Click **Generate All Subtitles**.
 5. **Download**: Once a video is done, use the **Get Files** dropdown to download SRT files.
 6. **Clear History**: Removes all uploaded videos, extracted audios, and generated transcripts from the server. Use when you want to free disk space or start fresh.
+
+### SRT Translate
+
+1. Switch to the **SRT Translate** tab.
+2. Upload one or more `.srt` files.
+3. Choose source/target languages and run **Translate SRT Files**.
+4. Download the translated and dual subtitles from **Get Files**.
+
+For SRT Translate, if a cue has two lines, the system always treats the **second line** as the source text and regenerates all outputs accordingly.
 
 
 ## 📂 Project Structure

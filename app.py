@@ -29,7 +29,12 @@ from src.config import (
     MAX_UPLOAD_MB,
     CLEANUP_AFTER_PROCESS,
 )
-from src.pipeline import process_video
+from src.pipeline import process_video, process_srt
+
+try:
+    import torch
+except Exception:
+    torch = None
 
 # -----------------------------------------------------------------------------
 # App setup
@@ -67,6 +72,17 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/system_info")
+def system_info():
+    cuda_available = False
+    if torch is not None:
+        try:
+            cuda_available = bool(torch.cuda.is_available())
+        except Exception:
+            cuda_available = False
+    return jsonify({"cuda_available": cuda_available})
+
+
 @app.route("/upload_and_process", methods=["POST"])
 def upload_and_process():
     if "file" not in request.files:
@@ -100,6 +116,12 @@ def upload_and_process():
     if whisper_model == "auto":
         whisper_model = None
 
+    whisper_prompt = request.form.get("whisper_prompt", "").strip()
+    if whisper_prompt:
+        whisper_prompt = whisper_prompt[:1000]
+    else:
+        whisper_prompt = None
+
 
     def to_download_path(file_path):
         rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
@@ -121,6 +143,7 @@ def upload_and_process():
                         source_lang=source_lang,
                         target_lang=target_lang,
                         model_name=whisper_model,
+                        initial_prompt=whisper_prompt,
                         progress_callback=cb,
                     )
 
@@ -172,6 +195,95 @@ def upload_and_process():
                     except OSError:
                         pass
 
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+
+
+@app.route("/upload_srt_and_translate", methods=["POST"])
+def upload_srt_and_translate():
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+
+    if not file.filename.lower().endswith(".srt"):
+        return jsonify({"error": "File type not allowed"}), 400
+
+    filename = secure_filename(file.filename)
+    base_name = os.path.splitext(filename)[0]
+    save_name = f"{base_name}.uploaded.srt"
+    save_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], save_name)
+    file.save(save_path)
+
+    source_lang = request.form.get("source_language", "auto").strip() or None
+    if source_lang == "auto":
+        source_lang = None
+
+    target_lang = request.form.get("target_language", "auto").strip()
+    if target_lang == "auto":
+        target_lang = "auto"
+    elif not target_lang or target_lang == "none":
+        target_lang = None
+
+    def to_download_path(file_path):
+        rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
+        return rel_path.replace(os.sep, "/")
+
+    def generate():
+        try:
+            yield json.dumps({"type": "progress", "message": f"SRT uploaded: {filename}"}) + "\n"
+
+            q = queue.Queue()
+
+            def worker():
+                try:
+                    def cb(msg):
+                        q.put({"type": "progress", "message": msg})
+
+                    outputs = process_srt(
+                        save_path,
+                        source_lang=source_lang,
+                        target_lang=target_lang,
+                        progress_callback=cb,
+                    )
+
+                    result_files = []
+                    if "original" in outputs:
+                        result_files.append({
+                            "label": "Original Subtitles (.srt)",
+                            "url": f"/download/{to_download_path(outputs['original'])}",
+                        })
+                    if "translated" in outputs:
+                        result_files.append({
+                            "label": "Translated Subtitles (.srt)",
+                            "url": f"/download/{to_download_path(outputs['translated'])}",
+                        })
+                    if "dual" in outputs:
+                        result_files.append({
+                            "label": "Bilingual Subtitles (Dual .srt)",
+                            "url": f"/download/{to_download_path(outputs['dual'])}",
+                        })
+
+                    q.put({"type": "result", "files": result_files})
+                except Exception as e:
+                    q.put({"type": "error", "message": str(e)})
+                finally:
+                    q.put(None)
+
+            t = threading.Thread(target=worker)
+            t.start()
+
+            while True:
+                item = q.get()
+                if item is None:
+                    break
+                yield json.dumps(item) + "\n"
+
+            t.join()
         except Exception as e:
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 

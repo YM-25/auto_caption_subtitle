@@ -10,10 +10,38 @@ import os
 from .config import get_data_paths, normalize_lang_code, WHISPER_MODEL
 from .video_processor import convert_video_to_audio
 from .transcriber import transcribe_audio, save_transcript, save_srt, save_dual_srt
+from .srt_utils import parse_srt_file, extract_source_segments, detect_language_from_text
 from .translator import translate_segments
 
 
-def process_video(video_path, source_lang=None, target_lang=None, model_name=None, progress_callback=None):
+def format_lang_tag(code):
+    if not code:
+        return "unknown"
+    return code.strip().replace("_", "-").lower()
+
+
+def build_srt_name(base, src=None, tgt=None, dual=False):
+    if src and tgt:
+        name = f"{base}.{src}__{tgt}"
+    elif src:
+        name = f"{base}.{src}"
+    else:
+        name = base
+    if dual:
+        name = f"{name}.dual"
+    return f"{name}.srt"
+
+
+def resolve_auto_target(source_code):
+    source_norm = normalize_lang_code(source_code)
+    if source_norm == "zh-cn":
+        return "en-GB"
+    if source_norm == "en":
+        return "zh-CN"
+    return "en-GB"
+
+
+def process_video(video_path, source_lang=None, target_lang=None, model_name=None, initial_prompt=None, progress_callback=None):
     """
     Process a single video: Convert → Transcribe → (optionally) Translate → SRT files.
 
@@ -23,6 +51,7 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
         target_lang: Target language for translation. None = transcript only;
             'auto' = smart select (English→Chinese, others→English).
         model_name: Whisper model override (e.g. 'small'); None uses default.
+        initial_prompt: Optional prompt to bias Whisper transcription.
         progress_callback: Optional callable(str) for status messages.
 
     Returns:
@@ -75,8 +104,14 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
         whisper_source = whisper_lang_from_ui(source_lang)
 
         active_model = model_name or WHISPER_MODEL
-        log(f"Step 2/4: Transcribing audio (source: {source_lang or 'auto'}, model: {active_model})...")
-        result = transcribe_audio(audio_path, model_name=active_model, language=whisper_source)
+        prompt_note = "with prompt" if initial_prompt else "no prompt"
+        log(f"Step 2/4: Transcribing audio (source: {source_lang or 'auto'}, model: {active_model}, {prompt_note})...")
+        result = transcribe_audio(
+            audio_path,
+            model_name=active_model,
+            language=whisper_source,
+            initial_prompt=initial_prompt,
+        )
         text = result["text"]
         segments = result["segments"]
         detected_lang = result.get("language") or ""
@@ -90,22 +125,6 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
             if norm == "en":
                 return "en-GB"
             return code
-
-        def format_lang_tag(code):
-            if not code:
-                return "unknown"
-            return code.strip().replace("_", "-").lower()
-
-        def build_srt_name(base, src=None, tgt=None, dual=False):
-            if src and tgt:
-                name = f"{base}.{src}__{tgt}"
-            elif src:
-                name = f"{base}.{src}"
-            else:
-                name = base
-            if dual:
-                name = f"{name}.dual"
-            return f"{name}.srt"
 
         effective_source = auto_source_lang(detected_lang) if source_lang is None else source_lang
         if source_lang is None and normalize_lang_code(detected_lang) == "zh" and normalize_lang_code(effective_source) == "zh-cn":
@@ -130,13 +149,7 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
             do_dual = False
             log("Target language set to None (transcript only). Skipping translation.")
         elif target_lang == "auto":
-            source_norm = normalize_lang_code(effective_source or detected_lang)
-            if source_norm == "zh-cn":
-                effective_target = "en-GB"
-            elif source_norm == "en":
-                effective_target = "zh-CN"
-            else:
-                effective_target = "en-GB"
+            effective_target = resolve_auto_target(effective_source or detected_lang)
             log(f"Auto-selected target language: {effective_target}")
             do_dual = True
         else:
@@ -179,3 +192,83 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
         raise
 
     return output_files
+
+
+def process_srt(srt_path, source_lang=None, target_lang="auto", progress_callback=None):
+    """
+    Process an existing SRT file: Translate → SRT output.
+
+    Args:
+        srt_path: Absolute path to the input SRT file.
+        source_lang: Source language code (e.g. 'en', 'zh-CN'). None/'auto' uses unknown.
+        target_lang: Target language for translation. 'auto' = smart select;
+            None skips translation.
+        progress_callback: Optional callable(str) for status messages.
+
+    Returns:
+        dict: Paths to generated files. Keys: 'original', 'translated', 'dual'.
+    """
+    def log(msg):
+        print(msg)
+        if progress_callback:
+            progress_callback(msg)
+
+    paths = get_data_paths()
+    os.makedirs(paths["transcripts"], exist_ok=True)
+
+    base_name = os.path.splitext(os.path.basename(srt_path))[0]
+    if base_name.endswith(".uploaded"):
+        base_name = base_name[: -len(".uploaded")]
+
+    source_lang = None if source_lang in (None, "", "auto") else source_lang
+
+    log(f"Starting SRT translation for {os.path.basename(srt_path)}...")
+    segments = parse_srt_file(srt_path)
+    if not segments:
+        raise ValueError("No subtitle segments found in SRT.")
+
+    source_segments = extract_source_segments(segments, bilingual=True)
+
+    if source_lang is None:
+        combined_text = " ".join(seg["text"] for seg in source_segments if seg["text"]).strip()
+        detected_source = detect_language_from_text(combined_text)
+        source_lang = detected_source or ""
+
+    source_tag = format_lang_tag(source_lang) if source_lang else "unknown"
+
+    if target_lang is None:
+        raise ValueError("Target language is required for SRT translation.")
+
+    if target_lang == "auto":
+        effective_target = resolve_auto_target(source_lang or "")
+        log(f"Auto-selected target language: {effective_target}")
+    else:
+        effective_target = target_lang
+
+    log(f"Translating SRT to '{effective_target}'...")
+    translated_segments = translate_segments(source_segments, target_lang=effective_target)
+
+    target_tag = format_lang_tag(effective_target)
+    original_srt_path = os.path.join(
+        paths["transcripts"],
+        build_srt_name(base_name, source_tag),
+    )
+    save_srt(source_segments, original_srt_path)
+
+    translated_srt_path = os.path.join(
+        paths["transcripts"],
+        build_srt_name(base_name, source_tag, target_tag),
+    )
+    save_srt(translated_segments, translated_srt_path)
+
+    dual_srt_path = os.path.join(
+        paths["transcripts"],
+        build_srt_name(base_name, source_tag, target_tag, dual=True),
+    )
+    save_dual_srt(source_segments, translated_segments, dual_srt_path)
+
+    return {
+        "original": original_srt_path,
+        "translated": translated_srt_path,
+        "dual": dual_srt_path,
+    }

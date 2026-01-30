@@ -1,9 +1,8 @@
 import whisper
-import os
 import torch
 import math
 
-def transcribe_audio(audio_path, model_name="base", language=None):
+def transcribe_audio(audio_path, model_name="base", language=None, initial_prompt=None):
     """
     Transcribe an audio file using OpenAI Whisper.
 
@@ -11,6 +10,7 @@ def transcribe_audio(audio_path, model_name="base", language=None):
         audio_path: Path to the input audio file.
         model_name: Whisper model (tiny, base, small, medium, large). Use src.config.WHISPER_MODEL.
         language: Language code (e.g. 'en', 'zh'). None or 'auto' = auto-detect.
+        initial_prompt: Optional prompt for names, places, jargon to bias transcription.
 
     Returns:
         dict: 'text', 'segments', 'language' (and other Whisper keys).
@@ -22,10 +22,12 @@ def transcribe_audio(audio_path, model_name="base", language=None):
     print(f"Transcribing '{audio_path}' with language='{language}'...")
     
     # Check if language is provided
+    options = {}
     if language and language != 'auto':
-        result = model.transcribe(audio_path, language=language)
-    else:
-        result = model.transcribe(audio_path)
+        options["language"] = language
+    if initial_prompt:
+        options["initial_prompt"] = initial_prompt
+    result = model.transcribe(audio_path, **options)
     
     return result
 
