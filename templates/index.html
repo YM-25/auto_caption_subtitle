@@ -9,6 +9,95 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+
+        .status-badge.configured {
+            background: rgba(40, 167, 69, 0.15);
+            color: #28a745;
+            border: 1px solid rgba(40, 167, 69, 0.3);
+        }
+
+        .status-badge.missing {
+            background: rgba(220, 53, 69, 0.15);
+            color: #dc3545;
+            border: 1px solid rgba(220, 53, 69, 0.3);
+        }
+
+        .api-key-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .api-key-input-wrapper i {
+            position: absolute;
+            left: 12px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .api-key-input-wrapper input {
+            padding-left: 36px !important;
+        }
+
+        .ai-hint {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .ai-check-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            z-index: 5;
+        }
+
+        .ai-check-btn:hover {
+            background: var(--primary-hover);
+        }
+
+        .ai-check-btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .status-badge.verifying {
+            background: rgba(108, 92, 231, 0.15);
+            color: #a29bfe;
+            border: 1px solid rgba(108, 92, 231, 0.3);
+        }
+
+        .status-badge.verified {
+            background: rgba(40, 167, 69, 0.25);
+            color: #2ecc71;
+            border: 1px solid rgba(46, 204, 113, 0.4);
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.2);
+        }
+
+        .status-badge.invalid {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+    </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -22,17 +111,21 @@
                 <h1>AutoCaption <span>Pro</span></h1>
             </div>
             <p class="subtitle">AI-Powered Subtitle Generation & Translation</p>
-            <p class="tagline">Upload once, get clean, dual-language captions in minutes.</p>
+            <p class="tagline">Now supporting LLM Online with API keys. Get professional dual-language captions in
+                minutes.</p>
             <p class="description">
-                Upload your video to automatically generate time-synced subtitles.
-                We use advanced AI to transcribe and translate your content instantly.
+                Combine the power of local Whisper transcription with online LLM translation (Gemini & GPT)
+                for the most accurate, time-synced subtitles for your videos.
             </p>
-            <p class="helper-text">Runs locally. For medium/large Whisper models, CUDA-enabled PyTorch is recommended.</p>
+            <p class="helper-text">Local Whisper processing. Online translation via API keys. CUDA-enabled PyTorch is
+                recommended for faster local results.
+            </p>
         </header>
 
         <main>
             <div class="mode-tabs">
-                <button class="mode-tab active" data-mode="video"><i class="fa-solid fa-video"></i> Video Upload</button>
+                <button class="mode-tab active" data-mode="video"><i class="fa-solid fa-video"></i> Video
+                    Upload</button>
                 <button class="mode-tab" data-mode="srt"><i class="fa-solid fa-file-lines"></i> SRT Translate</button>
             </div>
 
@@ -59,7 +152,8 @@
                     <!-- Logic Explanation -->
                     <div class="info-box">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
-                        <p><strong>Smart Selection:</strong> English audio is translated to <strong>Chinese (Simplified)</strong>, and
+                        <p><strong>Smart Selection:</strong> English audio is translated to <strong>Chinese
+                                (Simplified)</strong>, and
                             all
                             other languages to <strong>English (UK)</strong>. Dual-language subtitles are generated by
                             default.
@@ -85,8 +179,8 @@
                     </button>
                 </div>
 
-                <div class="settings-card" id="advanced-settings">
-                    <h3 class="settings-title">Advanced Settings</h3>
+                <div class="settings-card" id="transcription-settings">
+                    <h3 class="settings-title">Whisper Transcription Settings</h3>
                     <div class="setting-group">
                         <label for="model-select"><i class="fa-solid fa-microchip"></i> Whisper Model</label>
                         <select id="model-select">
@@ -103,45 +197,15 @@
                         <div class="device-status">Device: <span id="cuda-status">Detecting...</span></div>
                     </div>
                     <div class="setting-group">
-                        <label for="prompt-input"><i class="fa-solid fa-pen-nib"></i> Initial Prompt (Names, Topics)</label>
-                        <textarea id="prompt-input" rows="3" placeholder="Optional: key names, places, domain terms"></textarea>
+                        <label for="prompt-input"><i class="fa-solid fa-pen-nib"></i> Initial Prompt (Names,
+                            Topics)</label>
+                        <textarea id="prompt-input" rows="3"
+                            placeholder="Optional: key names, places, domain terms"></textarea>
                         <div class="prompt-actions">
                             <label class="checkbox-row">
                                 <input type="checkbox" id="glossary-use-filename" checked>
                                 Infer terms from filename
                             </label>
-                        </div>
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="glossary-text"><i class="fa-solid fa-book"></i> Glossary</label>
-                        <div class="glossary-input-row">
-                            <textarea id="glossary-text" rows="4" placeholder="Enter glossary terms here..."></textarea>
-                            <button class="primary-btn glossary-save-btn" id="glossary-save-now" type="button">Save Now</button>
-                        </div>
-                        <div class="helper-text">Supports only: term = translation, or term -> translation (one per line).</div>
-                        <div class="glossary-preview">
-                            <div class="glossary-preview-header">
-                                <span>Saved glossary preview</span>
-                            </div>
-                            <pre id="glossary-preview-content" class="glossary-preview-body">Loading...</pre>
-                        </div>
-                        <div class="glossary-actions">
-                            <div class="checkbox-row">
-                                <label class="checkbox-label glossary-label">
-                                    <input type="checkbox" id="glossary-use-saved" checked>
-                                    <a class="glossary-link" id="glossary-preview-saved" href="/glossary/preview" target="_blank" rel="noopener">Use saved glossary</a>
-                                </label>
-                            </div>
-                            <div class="checkbox-row">
-                                <label class="checkbox-label glossary-label">
-                                    <a class="glossary-link" id="glossary-preview-input" href="#" target="_blank" rel="noopener">Save input to glossary</a>
-                                </label>
-                            </div>
-                        </div>
-                        <div class="setting-group">
-                            <label for="glossary-file">Upload Glossary (CSV/JSON/TXT)</label>
-                            <input type="file" id="glossary-file" accept=".csv,.json,.txt">
                         </div>
                     </div>
                 </div>
@@ -168,12 +232,104 @@
                         <p>Upload your edited subtitles and generate translated + bilingual SRT files.</p>
                     </div>
 
+                    <div class="checkbox-col" style="margin-bottom: 1rem;">
+                        <label class="checkbox-row">
+                            <input type="checkbox" id="ai-enable-translation-srt">
+                            Use AI Translation (Higher Quality)
+                        </label>
+                    </div>
+
                     <button id="srt-process-btn" disabled>
                         <span class="btn-text">Translate SRT Files</span>
                         <span class="loader"></span>
                     </button>
                 </div>
             </section>
+
+            <!-- Global Shared Settings -->
+            <div class="settings-card" id="global-settings">
+                <h3 class="settings-title">AI & Glossary Configuration (Shared)</h3>
+
+                <div class="setting-group">
+                    <label for="glossary-text"><i class="fa-solid fa-book"></i> Global Glossary</label>
+                    <div class="glossary-input-row">
+                        <textarea id="glossary-text" rows="4" placeholder="Enter glossary terms here..."></textarea>
+                        <button class="primary-btn glossary-save-btn" id="glossary-save-now" type="button">Save
+                            Now</button>
+                    </div>
+                    <div class="helper-text">Supports only: term = translation, or term -> translation (one per
+                        line).</div>
+                    <div class="glossary-preview">
+                        <div class="glossary-preview-header">
+                            <span>Saved glossary preview</span>
+                        </div>
+                        <pre id="glossary-preview-content" class="glossary-preview-body">Loading...</pre>
+                    </div>
+                    <div class="glossary-actions">
+                        <div class="checkbox-row">
+                            <label class="checkbox-label glossary-label">
+                                <input type="checkbox" id="glossary-use-saved" checked>
+                                <a class="glossary-link" id="glossary-preview-saved" href="/glossary/preview"
+                                    target="_blank" rel="noopener">Use saved glossary</a>
+                            </label>
+                        </div>
+                        <div class="checkbox-row">
+                            <label class="checkbox-label glossary-label">
+                                <a class="glossary-link" id="glossary-preview-input" href="#" target="_blank"
+                                    rel="noopener">Save input to glossary</a>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label for="glossary-file">Upload Glossary (CSV/JSON/TXT)</label>
+                        <input type="file" id="glossary-file" accept=".csv,.json,.txt">
+                    </div>
+                </div>
+
+                <div class="setting-group ai-settings-group">
+                    <label><i class="fa-solid fa-robot"></i> AI Services Setup</label>
+                    <div class="ai-config-grid">
+                        <div class="setting-group">
+                            <label for="ai-provider">Provider</label>
+                            <select id="ai-provider">
+                                <option value="gemini">Google Gemini</option>
+                                <option value="chatgpt">OpenAI ChatGPT</option>
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label for="ai-model">Model</label>
+                            <select id="ai-model">
+                                <option value="gemini-3-flash">gemini-3-flash (2026 Default)</option>
+                                <option value="gemini-3-pro">gemini-3-pro (High Quality)</option>
+                            </select>
+                        </div>
+                        <div class="setting-group full-width">
+                            <label for="ai-api-key">
+                                API Key
+                                <span id="ai-status-badge" class="status-badge missing">Missing</span>
+                            </label>
+                            <div class="api-key-input-wrapper">
+                                <i id="ai-provider-icon" class="fa-brands fa-google"></i>
+                                <input type="password" id="ai-api-key"
+                                    placeholder="Enter API key for selected provider">
+                                <button type="button" id="ai-check-key-btn" class="ai-check-btn">Check</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="ai-key-hint" class="helper-text ai-hint">正在编辑 Google Gemini 的密钥</div>
+                    <div class="checkbox-col">
+                        <label class="checkbox-row">
+                            <input type="checkbox" id="ai-enable-expansion">
+                            Auto-expand prompt using AI (Video Flow)
+                        </label>
+                        <label class="checkbox-row">
+                            <input type="checkbox" id="ai-enable-translation">
+                            Use LLM for translation (Global)
+                        </label>
+                    </div>
+                    <div class="helper-text">AI is optional. Settings & Key are saved locally in your browser.</div>
+                </div>
+            </div>
 
             <!-- Global batch progress (shown while processing; updated by script.js) -->
             <div class="progress-area" id="progress-area">

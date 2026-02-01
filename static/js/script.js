@@ -40,6 +40,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const logModalDismiss = document.getElementById('log-modal-dismiss');
     const logModalBackdrop = document.getElementById('log-modal-backdrop');
 
+    // AI Service elements
+    const aiProvider = document.getElementById('ai-provider');
+    const aiModel = document.getElementById('ai-model');
+    const aiApiKey = document.getElementById('ai-api-key');
+    const aiEnableExpansion = document.getElementById('ai-enable-expansion');
+    const aiEnableTranslation = document.getElementById('ai-enable-translation');
+    const aiEnableTranslationSrt = document.getElementById('ai-enable-translation-srt');
+    const aiStatusBadge = document.getElementById('ai-status-badge');
+    const aiProviderIcon = document.getElementById('ai-provider-icon');
+    const aiKeyHint = document.getElementById('ai-key-hint');
+
     /** @type {{ file: File, id: string, status: string, results: Array<{label:string,url:string}>|null, log: {download_url:string, preview_url:string}|null }[]} */
     let videoQueue = [];
     const heavyModels = new Set(['medium', 'large', 'large-v2', 'large-v3']);
@@ -86,6 +97,17 @@ document.addEventListener('DOMContentLoaded', () => {
     modeTabs.forEach((tab) => {
         tab.addEventListener('click', () => setActiveMode(tab.dataset.mode));
     });
+
+    if (aiEnableTranslation && aiEnableTranslationSrt) {
+        aiEnableTranslation.addEventListener('change', () => {
+            aiEnableTranslationSrt.checked = aiEnableTranslation.checked;
+            saveAiSettings();
+        });
+        aiEnableTranslationSrt.addEventListener('change', () => {
+            aiEnableTranslation.checked = aiEnableTranslationSrt.checked;
+            saveAiSettings();
+        });
+    }
 
     function setQueuePaused(paused) {
         queuePaused = paused;
@@ -256,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <option value="de">German</option>
                             <option value="ja">Japanese</option>
                             <option value="ko">Korean</option>
+                            <option value="ru">Russian</option>
                         </select>
                     </div>
                     <div class="setting-group">
@@ -270,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <option value="de">German</option>
                             <option value="ja">Japanese</option>
                             <option value="ko">Korean</option>
+                            <option value="ru">Russian</option>
                             <option value="none">None (Transcript Only)</option>
                         </select>
                     </div>
@@ -294,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </select>
                 </div>
                 <div class="setting-group">
-                    <label>Initial Prompt (Override):</label>
+                    <label>Initial Prompt (append for this video):</label>
                     <textarea class="video-prompt-input" rows="2" placeholder="Optional: names, places, terms"></textarea>
                     <label class="checkbox-row">
                         <input type="checkbox" class="video-infer-checkbox" data-default="batch">
@@ -450,6 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <option value="de">German</option>
                         <option value="ja">Japanese</option>
                         <option value="ko">Korean</option>
+                        <option value="ru">Russian</option>
                     </select>
                 </div>
                 <div class="setting-group">
@@ -464,6 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <option value="de">German</option>
                         <option value="ja">Japanese</option>
                         <option value="ko">Korean</option>
+                        <option value="ru">Russian</option>
                     </select>
                 </div>
             </div>
@@ -671,18 +697,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
             formData.append('glossary_file', glossaryFile.files[0]);
         }
+
+        // AI Services
+        if (aiProvider) formData.append('ai_provider', aiProvider.value);
+        if (aiModel) formData.append('ai_model', aiModel.value);
+        if (aiApiKey) formData.append('ai_api_key', aiApiKey.value.trim());
+        if (aiEnableExpansion) formData.append('ai_enable_expansion', aiEnableExpansion.checked ? '1' : '0');
+        if (aiEnableTranslation) formData.append('ai_enable_translation', aiEnableTranslation.checked ? '1' : '0');
         const batchModel = modelSelect ? modelSelect.value : 'auto';
-        const batchPrompt = promptInput ? promptInput.value : '';
+        const batchPrompt = promptInput ? (promptInput.value || '').trim() : '';
         if (videoModelSelect && videoModelSelect.value !== 'batch') {
             formData.append('whisper_model', videoModelSelect.value);
         } else if (batchModel) {
             formData.append('whisper_model', batchModel);
         }
-        const promptValue = videoPromptInput && videoPromptInput.value.trim().length > 0
-            ? videoPromptInput.value.trim()
-            : batchPrompt;
-        if (promptValue) {
-            formData.append('whisper_prompt', promptValue);
+
+        const videoPrompt = videoPromptInput ? (videoPromptInput.value || '').trim() : '';
+        let finalPrompt = '';
+        if (batchPrompt && videoPrompt) {
+            finalPrompt = `${batchPrompt}\n${videoPrompt}`;
+        } else {
+            finalPrompt = videoPrompt || batchPrompt;
+        }
+
+        if (finalPrompt) {
+            formData.append('whisper_prompt', finalPrompt);
         }
 
         try {
@@ -763,6 +802,13 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('glossary_text', glossaryText ? glossaryText.value : '');
         formData.append('glossary_use_saved', glossaryUseSaved && glossaryUseSaved.checked ? '1' : '0');
         formData.append('glossary_use_filename', glossaryUseFilename && glossaryUseFilename.checked ? '1' : '0');
+
+        // AI Services
+        if (aiProvider) formData.append('ai_provider', aiProvider.value);
+        if (aiModel) formData.append('ai_model', aiModel.value);
+        if (aiApiKey) formData.append('ai_api_key', aiApiKey.value.trim());
+        if (aiEnableTranslationSrt) formData.append('ai_enable_translation', aiEnableTranslationSrt.checked ? '1' : '0');
+        else if (aiEnableTranslation) formData.append('ai_enable_translation', aiEnableTranslation.checked ? '1' : '0');
         if (glossaryFile && glossaryFile.files && glossaryFile.files[0]) {
             formData.append('glossary_file', glossaryFile.files[0]);
         }
@@ -1072,6 +1118,199 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.download-dropdown').forEach((d) => d.classList.remove('show-dropdown'));
         document.querySelectorAll('.video-item').forEach((item) => item.classList.remove('is-active'));
     });
+
+    // --- AI Persistence & Dynamic Options ---
+    const AI_MODELS = {
+        gemini: [
+            { value: 'gemini-3-flash', label: 'gemini-3-flash (2026 Default)' },
+            { value: 'gemini-3-pro', label: 'gemini-3-pro (High Quality)' },
+            { value: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite (Economy)' },
+            { value: 'gemini-1.5-flash', label: 'gemini-1.5-flash (Legacy)' },
+        ],
+        chatgpt: [
+            { value: 'gpt-5-mini', label: 'gpt-5-mini (2026 Default)' },
+            { value: 'gpt-5.2', label: 'gpt-5.2 (High Quality)' },
+            { value: 'gpt-4o-mini', label: 'gpt-4o-mini (Legacy Economic)' },
+            { value: 'gpt-3.5-turbo', label: 'gpt-3.5-turbo (Legacy)' },
+        ],
+    };
+
+    function updateAiModelOptions() {
+        if (!aiProvider || !aiModel) return;
+        const provider = aiProvider.value;
+        const models = AI_MODELS[provider] || [];
+        const currentVal = aiModel.value;
+        aiModel.innerHTML = models.map((m) => `<option value="${m.value}">${m.label}</option>`).join('');
+
+        // If current model is not for this provider or it's first load, pick first (default)
+        if (!models.some((m) => m.value === currentVal)) {
+            aiModel.value = models[0]?.value || '';
+        }
+    }
+
+    function saveAiSettings() {
+        const provider = aiProvider?.value;
+        const currentSettings = JSON.parse(localStorage.getItem('autocaption_ai_settings') || '{}');
+        const keys = currentSettings.keys || { gemini: '', chatgpt: '' };
+
+        // Update the key for the CURRENT provider
+        if (provider) keys[provider] = aiApiKey?.value || '';
+
+        const settings = {
+            provider: provider,
+            model: aiModel?.value,
+            keys: keys,
+            enableExpansion: aiEnableExpansion?.checked,
+            enableTranslation: aiEnableTranslation?.checked,
+        };
+        localStorage.setItem('autocaption_ai_settings', JSON.stringify(settings));
+        updateAiStatusUI();
+    }
+
+    const aiCheckKeyBtn = document.getElementById('ai-check-key-btn');
+
+    function updateAiStatusUI() {
+        if (!aiProvider || !aiStatusBadge || !aiProviderIcon || !aiKeyHint) return;
+        const provider = aiProvider.value;
+        const currentSettings = JSON.parse(localStorage.getItem('autocaption_ai_settings') || '{}');
+        const keys = currentSettings.keys || { gemini: '', chatgpt: '' };
+        const k = keys[provider] || '';
+
+        // Validation logic
+        const isFormatValid = validateApiKeyFormat(provider, k);
+
+        // Status Badge
+        if (!k.trim()) {
+            aiStatusBadge.textContent = 'Missing';
+            aiStatusBadge.className = 'status-badge missing';
+        } else if (!isFormatValid) {
+            aiStatusBadge.textContent = 'Format Error';
+            aiStatusBadge.className = 'status-badge invalid';
+        } else {
+            // Check if it was already verified in this session or from storage
+            const verifiedKeys = JSON.parse(sessionStorage.getItem('verified_keys') || '{}');
+            if (verifiedKeys[provider] === k) {
+                aiStatusBadge.textContent = 'Verified';
+                aiStatusBadge.className = 'status-badge verified';
+            } else {
+                aiStatusBadge.textContent = 'Configured';
+                aiStatusBadge.className = 'status-badge configured';
+            }
+        }
+
+        // Provider Icon & Hint
+        if (provider === 'gemini') {
+            aiProviderIcon.className = 'fa-brands fa-google';
+            aiKeyHint.textContent = '正在编辑 Google Gemini 的密钥';
+        } else {
+            aiProviderIcon.className = 'fa-solid fa-bolt';
+            aiKeyHint.textContent = '正在编辑 OpenAI ChatGPT 的密钥';
+        }
+
+        // Sync input field if provider just changed
+        if (aiApiKey && aiApiKey.value !== k) {
+            aiApiKey.value = k;
+        }
+
+        // Enable/Disable check button
+        if (aiCheckKeyBtn) {
+            aiCheckKeyBtn.disabled = !k.trim() || !isFormatValid;
+        }
+    }
+
+    function validateApiKeyFormat(provider, key) {
+        if (!key) return false;
+        if (provider === 'gemini') {
+            // Gemini keys are usually around 39 chars, alphanumeric + underscores
+            return key.length >= 30;
+        } else if (provider === 'chatgpt') {
+            // OpenAI keys start with sk- or proj-sk- or something similar
+            return (key.startsWith('sk-') || key.includes('-sk-')) && key.length >= 20;
+        }
+        return true;
+    }
+
+    async function checkApiKey() {
+        if (!aiProvider || !aiApiKey || !aiCheckKeyBtn || !aiStatusBadge) return;
+        const provider = aiProvider.value;
+        const key = aiApiKey.value;
+
+        aiCheckKeyBtn.disabled = true;
+        aiCheckKeyBtn.textContent = '...';
+        aiStatusBadge.textContent = 'Verifying...';
+        aiStatusBadge.className = 'status-badge verifying';
+
+        try {
+            const response = await fetch('/verify_api_key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, api_key: key })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                aiStatusBadge.textContent = 'Verified';
+                aiStatusBadge.className = 'status-badge verified';
+                // Store verified status for this session
+                const verifiedKeys = JSON.parse(sessionStorage.getItem('verified_keys') || '{}');
+                verifiedKeys[provider] = key;
+                sessionStorage.setItem('verified_keys', JSON.stringify(verifiedKeys));
+            } else {
+                aiStatusBadge.textContent = 'Invalid';
+                aiStatusBadge.className = 'status-badge invalid';
+                alert(`Verification failed: ${data.message}`);
+            }
+        } catch (err) {
+            aiStatusBadge.textContent = 'Error';
+            aiStatusBadge.className = 'status-badge invalid';
+            alert('Network error during verification.');
+        } finally {
+            aiCheckKeyBtn.disabled = false;
+            aiCheckKeyBtn.textContent = 'Check';
+        }
+    }
+
+    if (aiCheckKeyBtn) {
+        aiCheckKeyBtn.addEventListener('click', checkApiKey);
+    }
+
+    function loadAiSettings() {
+        const raw = localStorage.getItem('autocaption_ai_settings');
+        if (!raw) return;
+        try {
+            const s = JSON.parse(raw);
+            if (aiProvider && s.provider) aiProvider.value = s.provider;
+            updateAiModelOptions();
+            if (aiModel && s.model) aiModel.value = s.model;
+
+            // Load key for current provider
+            const keys = s.keys || { gemini: '', chatgpt: '' };
+            if (aiApiKey) aiApiKey.value = keys[aiProvider.value] || '';
+
+            if (aiEnableExpansion && s.enableExpansion !== undefined) aiEnableExpansion.checked = s.enableExpansion;
+            if (aiEnableTranslation && s.enableTranslation !== undefined) {
+                aiEnableTranslation.checked = s.enableTranslation;
+                if (aiEnableTranslationSrt) aiEnableTranslationSrt.checked = s.enableTranslation;
+            }
+
+            updateAiStatusUI();
+        } catch (_) { }
+    }
+
+    if (aiProvider) {
+        aiProvider.addEventListener('change', () => {
+            updateAiModelOptions();
+            updateAiStatusUI(); // This will also swap the key in the input
+            saveAiSettings();
+        });
+    }
+    [aiModel, aiApiKey, aiEnableExpansion, aiEnableTranslation, aiEnableTranslationSrt].forEach((el) => {
+        el?.addEventListener('change', saveAiSettings);
+        el?.addEventListener('input', saveAiSettings);
+    });
+
+    // Start
+    loadAiSettings();
 
     clearBtn.addEventListener('click', async () => {
         if (!confirm('Clear all uploaded files and generated subtitles from the server? This cannot be undone.')) return;

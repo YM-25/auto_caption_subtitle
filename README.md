@@ -6,20 +6,23 @@
 
 ---
 
-**AutoCaption Pro** is an intelligent, web-based tool designed to automatically generate, translate, and synchronize subtitles for your videos. Powered by OpenAI's **Whisper** model for state-of-the-art speech recognition and **Deep Translator** for multilingual support.
-
-This tool runs fully **locally**. You need a local Python installation and required packages.
+**AutoCaption Pro** is an intelligent, web-based tool designed to automatically generate, translate, and synchronize subtitles for your videos. It leverages a powerful hybrid architecture:
+- **Local Intelligence**: Uses OpenAI's **Whisper** model for state-of-the-art speech recognition, running directly on your hardware for privacy and speed.
+- **Cloud Translation (Optional)**: Supports high-quality translation via **Google Gemini** and **OpenAI ChatGPT** with your own API keys, or lightweight translation using **Deep Translator**.
 
 
 ## ✨ Features
 
 - **🚀 Batch Video Upload**: Upload multiple videos at once and process them in a queue.
 - **🎙️ Automatic Transcription**: Converts video speech to text with high accuracy using Whisper.
-- **🌍 Smart Translation**:
-  - Automatically translates English to **Chinese (Simplified)**.
-  - Translates other languages to **English (UK / en-GB)**.
-  - If detected Chinese is ambiguous, defaults to **Simplified** for downstream logic.
-  - Per-video language selection for customized results (including **Chinese Simplified/Traditional** and **None**).
+- **🌍 Smart Hybrid Translation**:
+  - **Local/Cloud**: Choose between local `deep-translator` or superior cloud-based LLMs (**Gemini 3 Flash/Pro**, **GPT-5/5.2**).
+  - **Dynamic Workflow**: English audio is smartly translated to **Chinese (Simplified)**, while other languages default to **English (UK / en-GB)**.
+  - **Precision Controls**: Native support for **Chinese Simplified/Traditional** and language-specific overrides.
+- **🤖 Integrated AI Services**:
+  - **API Key Management**: Securely input and verify Gemini/GPT keys directly in the browser.
+  - **AI Prompt Expansion**: Use LLMs to automatically refine and expand transcription prompts based on context.
+  - **LLM Translation**: Use world-class LLMs to interpret nuances, slang, and technical terms.
 - **⚡ Sequential Batch Processing**: Processes videos one by one with individual progress tracking.
 - **📥 Multiple Export Formats**:
   - `*.{source}.srt`: Original language subtitles (e.g. `.zh-cn`).
@@ -99,11 +102,12 @@ Note: `requirements.txt` installs the default CPU build of PyTorch unless you ma
 ## 🏃 Usage
 
 1. **Upload**: Drag and drop multiple video files onto the upload area.
-2. **Configure**: Set individual **Source** and **Target** languages for each video in the horizontal list (including Simplified/Traditional Chinese).
-3. **Advanced (Optional)**: Choose a Whisper model and prompt for the batch; per-video overrides are available inside each item.
-4. **Process**: Click **Generate All Subtitles**.
-5. **Download**: Once a video is done, use the **Get Files** dropdown to download SRT files.
-6. **Clear History**: Removes all uploaded videos, extracted audios, and generated transcripts from the server. Use when you want to free disk space or start fresh.
+2. **Configure AI (Optional)**: Go to the **AI & Glossary Configuration** section to set your Gemini or GPT API key. Verify the key to unlock high-quality translation.
+3. **Set Languages**: Configure **Source** and **Target** languages for each video in the horizontal list.
+4. **Advanced Settings**: Choose a Whisper model and initial prompt. Enable **Auto-expand prompt using AI** for better accuracy.
+5. **Process**: Click **Generate All Subtitles**.
+6. **Download**: Once a video is done, use the **Get Files** dropdown to download SRT files.
+7. **Clear History**: Removes all uploaded videos, extracted audios, and generated transcripts to free up disk space.
 
 ### SRT Translate
 

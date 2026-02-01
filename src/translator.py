@@ -4,21 +4,37 @@ One translator instance is reused for all segments to avoid repeated setup.
 """
 
 from deep_translator import GoogleTranslator
+from .ai_service import ai_translate_text
 
+
+import re
 
 def apply_glossary(text, glossary):
     if not glossary:
         return text
+        
+    # Sort by length descending to match longer phrases first
     ordered = sorted(glossary.items(), key=lambda item: len(item[0]), reverse=True)
     updated = text
+    
     for src, tgt in ordered:
         if not src:
             continue
-        updated = updated.replace(src, tgt)
+            
+        # If source term contains only word characters (Latin/Cyrillic/etc.), use word boundaries.
+        # Otherwise (CJK or mixed), use literal replacement.
+        if src.isalnum():
+            # Use regex for word boundaries to avoid replacing parts of other words (e.g. 'cat' in 'category')
+            pattern = rf"\b{re.escape(src)}\b"
+            updated = re.sub(pattern, tgt, updated, flags=re.IGNORECASE if src.islower() else 0)
+        else:
+            # For CJK or mixed, literal replacement is safer and expected behavior
+            updated = updated.replace(src, tgt)
+            
     return updated
 
 
-def translate_segments(segments, target_lang="en", progress_callback=None, glossary=None):
+def translate_segments(segments, target_lang="en", progress_callback=None, glossary=None, ai_options=None):
     """
     Translate segment texts to the target language; keep timings and 1:1 order for dual SRT.
 
@@ -55,7 +71,22 @@ def translate_segments(segments, target_lang="en", progress_callback=None, gloss
         try:
             if i % 10 == 0:
                 print(f"Translating segment {i}/{len(segments)}: {original_text[:20]}...")
-            translated_text = translator.translate(original_text)
+            
+            translated_text = None
+            if ai_options and ai_options.get("enable_translation") and ai_options.get("api_key"):
+                translated_text = ai_translate_text(
+                    original_text, 
+                    target_lang=effective_target, 
+                    provider=ai_options.get("provider", "gemini"), 
+                    api_key=ai_options.get("api_key"),
+                    model=ai_options.get("model"),
+                    glossary=glossary
+                )
+            
+            # Fallback to Google Translate if AI is disabled or fails
+            if translated_text is None:
+                translated_text = translator.translate(original_text)
+                
             new_seg['text'] = apply_glossary(translated_text, glossary)
         except Exception as e:
             print(f"Failed to translate segment {i}: {e}")

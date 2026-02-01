@@ -12,6 +12,7 @@ from .video_processor import convert_video_to_audio
 from .transcriber import transcribe_audio, save_transcript, save_srt, save_dual_srt
 from .srt_utils import parse_srt_file, extract_source_segments, detect_language_from_text
 from .translator import translate_segments
+from .ai_service import expand_prompt
 
 
 def format_lang_tag(code):
@@ -41,7 +42,7 @@ def resolve_auto_target(source_code):
     return "en-GB"
 
 
-def process_video(video_path, source_lang=None, target_lang=None, model_name=None, initial_prompt=None, glossary=None, progress_callback=None):
+def process_video(video_path, source_lang=None, target_lang=None, model_name=None, initial_prompt=None, glossary=None, progress_callback=None, ai_options=None):
     """
     Process a single video: Convert → Transcribe → (optionally) Translate → SRT files.
 
@@ -107,6 +108,22 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
         whisper_source = whisper_lang_from_ui(source_lang)
 
         active_model = model_name or WHISPER_MODEL
+        
+        # Step 2a: AI Prompt Expansion
+        if ai_options and ai_options.get("enable_expansion") and ai_options.get("api_key"):
+            emit("Step 2/4: Expanding prompt using AI...", stage="transcribe")
+            expanded = expand_prompt(
+                video_filename, 
+                user_prompt=initial_prompt, 
+                provider=ai_options.get("provider", "gemini"), 
+                api_key=ai_options.get("api_key"),
+                model=ai_options.get("model"),
+                glossary=glossary
+            )
+            if expanded:
+                emit(f"AI expanded prompt: {expanded[:100]}...")
+                initial_prompt = expanded
+
         prompt_note = "with prompt" if initial_prompt else "no prompt"
         emit(
             f"Step 2/4: Transcribing audio (source: {source_lang or 'auto'}, model: {active_model}, {prompt_note})...",
@@ -189,6 +206,7 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
                 target_lang=effective_target,
                 progress_callback=on_translate_progress,
                 glossary=glossary,
+                ai_options=ai_options,
             )
             target_tag = format_lang_tag(effective_target)
             translated_srt_path = os.path.join(
@@ -220,7 +238,7 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
     return output_files
 
 
-def process_srt(srt_path, source_lang=None, target_lang="auto", glossary=None, progress_callback=None):
+def process_srt(srt_path, source_lang=None, target_lang="auto", glossary=None, progress_callback=None, ai_options=None):
     """
     Process an existing SRT file: Translate → SRT output.
 
@@ -289,6 +307,7 @@ def process_srt(srt_path, source_lang=None, target_lang="auto", glossary=None, p
         target_lang=effective_target,
         progress_callback=on_translate_progress,
         glossary=glossary,
+        ai_options=ai_options,
     )
 
     target_tag = format_lang_tag(effective_target)

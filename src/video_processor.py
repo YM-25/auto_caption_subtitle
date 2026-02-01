@@ -22,5 +22,5 @@ def convert_video_to_audio(video_path, audio_output_path):
         )
         print(f"Successfully converted to '{audio_output_path}'")
     except ffmpeg.Error as e:
-        print(f"Error converting video to audio: {e}")
+        print(f"Error converting video to audio: {e.stderr.decode() if e.stderr else str(e)}")
         raise

@@ -41,6 +41,7 @@ from src.glossary import (
     merge_glossaries,
     infer_glossary_from_filename,
 )
+from src.ai_service import verify_api_key
 
 try:
     import torch
@@ -140,6 +141,13 @@ def upload_and_process():
     glossary_prompt = request.form.get("glossary_prompt", "0").strip() == "1"
     glossary_save_text = request.form.get("glossary_save_text", "").strip()
 
+    # AI Enhancement Parameters
+    ai_provider = request.form.get("ai_provider", "gemini").strip()
+    ai_model = request.form.get("ai_model", "").strip()
+    ai_api_key = request.form.get("ai_api_key", "").strip()
+    ai_enable_expansion = request.form.get("ai_enable_expansion", "0").strip() == "1"
+    ai_enable_translation = request.form.get("ai_enable_translation", "0").strip() == "1"
+
     glossary_file = request.files.get("glossary_file")
     glossary_file_path = None
     if glossary_file and glossary_file.filename:
@@ -228,6 +236,13 @@ def upload_and_process():
                         initial_prompt=whisper_prompt,
                         glossary=merged_glossary,
                         progress_callback=cb,
+                        ai_options={
+                            "provider": ai_provider,
+                            "model": ai_model,
+                            "api_key": ai_api_key,
+                            "enable_expansion": ai_enable_expansion,
+                            "enable_translation": ai_enable_translation,
+                        },
                     )
 
                     result_files = []
@@ -411,6 +426,12 @@ def upload_srt_and_translate():
                         target_lang=target_lang,
                         glossary=merged_glossary,
                         progress_callback=cb,
+                        ai_options={
+                            "provider": request.form.get("ai_provider", "gemini").strip(),
+                            "model": request.form.get("ai_model", "").strip(),
+                            "api_key": request.form.get("ai_api_key", "").strip(),
+                            "enable_translation": request.form.get("ai_enable_translation", "0").strip() == "1",
+                        },
                     )
 
                     result_files = []
@@ -533,6 +554,19 @@ def save_glossary_now():
 
     added_count = len(text_glossary) + len(file_glossary)
     return jsonify({"message": "Glossary saved", "total_terms": len(merged), "added_terms": added_count})
+
+
+@app.route("/verify_api_key", methods=["POST"])
+def verify_key():
+    data = request.json or {}
+    provider = data.get("provider")
+    api_key = data.get("api_key")
+    
+    if not provider or not api_key:
+        return jsonify({"success": False, "message": "Missing provider or API key."}), 400
+        
+    success, message = verify_api_key(provider, api_key)
+    return jsonify({"success": success, "message": message})
 
 
 @app.route("/clear_history", methods=["POST"])

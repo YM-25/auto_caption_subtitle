@@ -474,6 +474,36 @@ select:focus {
     border-color: var(--primary);
 }
 
+input[type="text"],
+input[type="password"],
+input[type="url"],
+input[type="number"] {
+    width: 100%;
+    padding: 0.8rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input:focus {
+    border-color: var(--primary);
+}
+
+.ai-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.ai-config-grid .setting-group.full-width {
+    grid-column: span 2;
+}
+
 textarea {
     width: 100%;
     padding: 0.8rem;
