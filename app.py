@@ -405,6 +405,12 @@ def upload_srt_and_translate():
 
     merged_glossary, _ = handle_glossary_params(request.form, request.files, filename)
 
+    # AI Enhancement Parameters (capture before starting thread)
+    ai_provider = request.form.get("ai_provider", "gemini").strip()
+    ai_model = request.form.get("ai_model", "").strip()
+    ai_api_key = request.form.get("ai_api_key", "").strip()
+    ai_enable_translation = request.form.get("ai_enable_translation", "0").strip() == "1"
+
     def generate():
         try:
             yield json.dumps({"type": "progress", "message": f"SRT uploaded: {filename}"}) + "\n"
@@ -445,10 +451,10 @@ def upload_srt_and_translate():
                         glossary=merged_glossary,
                         progress_callback=cb,
                         ai_options={
-                            "provider": request.form.get("ai_provider", "gemini").strip(),
-                            "model": request.form.get("ai_model", "").strip(),
-                            "api_key": request.form.get("ai_api_key", "").strip(),
-                            "enable_translation": request.form.get("ai_enable_translation", "0").strip() == "1",
+                            "provider": ai_provider,
+                            "model": ai_model,
+                            "api_key": ai_api_key,
+                            "enable_translation": ai_enable_translation,
                         },
                     )
 
