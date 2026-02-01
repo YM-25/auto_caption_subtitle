@@ -7,7 +7,7 @@ import os
 import re
 from typing import Dict
 
-_WORD_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+")
+_WORD_SPLIT_RE = re.compile(r"[^\w]+")
 _CAMEL_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z0-9])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 

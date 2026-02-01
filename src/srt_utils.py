@@ -3,11 +3,14 @@ SRT parsing utilities for translating existing subtitle files.
 """
 
 import re
+from typing import Dict, List, Optional
+
 
 _TIME_RE = re.compile(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})")
 
 
-def timestamp_to_seconds(timestamp):
+def timestamp_to_seconds(timestamp: str) -> float:
+    """Convert SRT timestamp (HH:MM:SS,mmm) to seconds."""
     match = _TIME_RE.match(timestamp.strip())
     if not match:
         return 0.0
@@ -15,9 +18,10 @@ def timestamp_to_seconds(timestamp):
     return hours * 3600 + minutes * 60 + seconds + (millis / 1000.0)
 
 
-def parse_srt_content(content):
+def parse_srt_content(content: str) -> List[Dict]:
+    """Parse SRT content string into a list of segment dicts."""
     blocks = re.split(r"\n\s*\n", content.strip()) if content.strip() else []
-    segments = []
+    segments: List[Dict] = []
 
     for block in blocks:
         lines = [line.rstrip() for line in block.splitlines() if line.strip() != ""]
@@ -46,12 +50,14 @@ def parse_srt_content(content):
     return segments
 
 
-def parse_srt_file(file_path):
+def parse_srt_file(file_path: str) -> List[Dict]:
+    """Parse an SRT file into a list of segment dicts."""
     with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
         return parse_srt_content(file.read())
 
 
-def detect_script(text):
+def detect_script(text: str) -> str:
+    """Detect the predominant script in text (han, kana, hangul, cyrillic, latin)."""
     counts = {"han": 0, "kana": 0, "hangul": 0, "cyrillic": 0, "latin": 0}
     for char in text:
         code = ord(char)
@@ -70,7 +76,8 @@ def detect_script(text):
     return best if counts[best] > 0 else "unknown"
 
 
-def detect_bilingual_segments(segments, threshold=0.6):
+def detect_bilingual_segments(segments: List[Dict], threshold: float = 0.6) -> bool:
+    """Detect if segments appear to be bilingual (different scripts in first/last line)."""
     if not segments:
         return False
     bilingual_hits = 0
@@ -94,8 +101,9 @@ def detect_bilingual_segments(segments, threshold=0.6):
     return (bilingual_hits / total) >= threshold
 
 
-def extract_source_segments(segments, bilingual=False):
-    source_segments = []
+def extract_source_segments(segments: List[Dict], bilingual: bool = False) -> List[Dict]:
+    """Extract source text from segments (last line if bilingual, else full text)."""
+    source_segments: List[Dict] = []
     for seg in segments:
         lines = seg.get("lines") or []
         if bilingual and len(lines) >= 2:
@@ -106,7 +114,8 @@ def extract_source_segments(segments, bilingual=False):
     return source_segments
 
 
-def detect_language_from_text(text):
+def detect_language_from_text(text: str) -> str:
+    """Infer language code from detected script."""
     script = detect_script(text)
     if script == "kana":
         return "ja"

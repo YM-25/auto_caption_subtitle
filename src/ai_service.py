@@ -27,6 +27,17 @@ except ImportError:
 # Cache for models that reject temperature
 _NO_TEMPERATURE_MODELS: set[str] = set()
 
+# Cache for Gemini API key to avoid redundant configure calls
+_GEMINI_CONFIGURED_KEY: str | None = None
+
+
+def _configure_gemini(api_key: str) -> None:
+    """Configure Gemini API only if key changed."""
+    global _GEMINI_CONFIGURED_KEY
+    if _GEMINI_CONFIGURED_KEY != api_key:
+        genai.configure(api_key=api_key)
+        _GEMINI_CONFIGURED_KEY = api_key
+
 def _normalize_provider(provider: str) -> str:
     """Normalize provider names to 'gpt' or 'gemini'."""
     p = str(provider).lower().strip()
@@ -163,7 +174,7 @@ def expand_prompt(filename, user_prompt=None, provider="gemini", api_key=None, m
 
     try:
         if provider_id == "gemini" and HAS_GEMINI:
-            genai.configure(api_key=api_key)
+            _configure_gemini(api_key)
             genai_model = genai.GenerativeModel(active_model, system_instruction=system_instruction)
             response = genai_model.generate_content(prompt_msg, generation_config={"temperature": 0.2, "max_output_tokens": 300})
             keywords = _sanitize_keywords(response.text.strip(), max_keywords=80)
@@ -236,7 +247,7 @@ def ai_translate_text(text, target_lang, provider="gemini", api_key=None, model=
 
     try:
         if provider_id == "gemini" and HAS_GEMINI:
-            genai.configure(api_key=api_key)
+            _configure_gemini(api_key)
             genai_model = genai.GenerativeModel(active_model, system_instruction=system_instruction)
             response = genai_model.generate_content(prompt_msg, generation_config={"temperature": 0.2, "max_output_tokens": 2048})
             return response.text.strip()
@@ -273,7 +284,7 @@ def verify_api_key(provider, api_key):
         if provider_id == "gemini":
             if not HAS_GEMINI:
                 return False, "Gemini library not installed."
-            genai.configure(api_key=api_key)
+            _configure_gemini(api_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content("Hi", generation_config={"max_output_tokens": 5})
             if response and response.text:

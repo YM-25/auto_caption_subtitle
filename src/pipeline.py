@@ -15,6 +15,17 @@ from .translator import translate_segments
 from .ai_service import expand_prompt
 
 
+def _create_emit_fn(progress_callback):
+    """Factory to create an emit function for progress reporting."""
+    def emit(message, **payload):
+        print(message)
+        if progress_callback:
+            data = {"type": "progress", "message": message}
+            data.update(payload)
+            progress_callback(data)
+    return emit
+
+
 def format_lang_tag(code):
     if not code:
         return "unknown"
@@ -42,6 +53,22 @@ def resolve_auto_target(source_code):
     return "en-GB"
 
 
+def convert_zh(text, segments, mode):
+    try:
+        from opencc import OpenCC
+    except Exception:
+        return text, segments, False
+
+    converter = OpenCC(mode)
+    new_text = converter.convert(text)
+    new_segments = []
+    for seg in segments:
+        new_seg = seg.copy()
+        new_seg["text"] = converter.convert(seg.get("text", ""))
+        new_segments.append(new_seg)
+    return new_text, new_segments, True
+
+
 def process_video(video_path, source_lang=None, target_lang=None, model_name=None, initial_prompt=None, glossary=None, progress_callback=None, ai_options=None):
     """
     Process a single video: Convert → Transcribe → (optionally) Translate → SRT files.
@@ -59,12 +86,7 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
     Returns:
         dict: Paths to generated files. Keys: 'original', optionally 'translated', 'dual'.
     """
-    def emit(message, **payload):
-        print(message)
-        if progress_callback:
-            data = {"type": "progress", "message": message}
-            data.update(payload)
-            progress_callback(data)
+    emit = _create_emit_fn(progress_callback)
 
     paths = get_data_paths()
     os.makedirs(paths["audios"], exist_ok=True)
@@ -160,6 +182,25 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
         if source_lang is None and normalize_lang_code(detected_lang) == "zh" and normalize_lang_code(effective_source) == "zh-cn":
             emit("Detected Chinese without script/region. Defaulting source to zh-CN (Simplified).")
 
+        # Step 2c: Chinese script conversion (OpenCC)
+        # Normalize effective source to handle auto-detection accurately
+        source_norm = normalize_lang_code(effective_source or detected_lang)
+        
+        conversion_mode = None
+        if source_norm == "zh-cn":
+            conversion_mode = "t2s"  # Traditional to Simplified
+            msg = "Simplified Chinese (OpenCC t2s)"
+        elif source_norm == "zh-tw":
+            conversion_mode = "s2t"  # Simplified to Traditional
+            msg = "Traditional Chinese (OpenCC s2t)"
+
+        if conversion_mode:
+            text, segments, converted = convert_zh(text, segments, conversion_mode)
+            if converted:
+                emit(f"Converted transcription to {msg}.", stage="transcribe")
+            else:
+                emit(f"OpenCC not installed. Skipping {msg} conversion.", stage="transcribe")
+
         source_tag = format_lang_tag(effective_source or detected_lang)
         srt_path = os.path.join(paths["transcripts"], build_srt_name(video_name_no_ext, source_tag))
 
@@ -204,6 +245,7 @@ def process_video(video_path, source_lang=None, target_lang=None, model_name=Non
             translated_segments = translate_segments(
                 segments,
                 target_lang=effective_target,
+                source_lang=effective_source or detected_lang,
                 progress_callback=on_translate_progress,
                 glossary=glossary,
                 ai_options=ai_options,
@@ -253,12 +295,7 @@ def process_srt(srt_path, source_lang=None, target_lang="auto", glossary=None, p
     Returns:
         dict: Paths to generated files. Keys: 'original', 'translated', 'dual'.
     """
-    def emit(message, **payload):
-        print(message)
-        if progress_callback:
-            data = {"type": "progress", "message": message}
-            data.update(payload)
-            progress_callback(data)
+    emit = _create_emit_fn(progress_callback)
 
     paths = get_data_paths()
     os.makedirs(paths["transcripts"], exist_ok=True)
@@ -305,6 +342,7 @@ def process_srt(srt_path, source_lang=None, target_lang="auto", glossary=None, p
     translated_segments = translate_segments(
         source_segments,
         target_lang=effective_target,
+        source_lang=source_lang,
         progress_callback=on_translate_progress,
         glossary=glossary,
         ai_options=ai_options,

@@ -6,6 +6,7 @@ Configuration is centralized in src.config. Optional .env is loaded if present.
 """
 
 import os
+import re
 
 # Load .env from project root so FLASK_SECRET_KEY, WHISPER_MODEL, etc. apply
 try:
@@ -22,7 +23,6 @@ import time
 from datetime import datetime
 
 from flask import Flask, render_template, request, send_file, jsonify, Response, stream_with_context
-from werkzeug.utils import secure_filename
 
 from src.config import (
     get_data_paths,
@@ -76,6 +76,103 @@ def allowed_file(filename):
     return ext in ALLOWED_VIDEO_EXTENSIONS
 
 
+def secure_filename_unicode(filename):
+    """
+    A Unicode-safe version of secure_filename.
+    Preserves Chinese characters and other non-ASCII letters/numbers,
+    while removing path separators and dangerous control characters.
+    """
+    if not filename:
+        return "unnamed_file"
+    
+    # 1. Basic path normalization
+    filename = os.path.basename(filename)
+    
+    # 2. Characters to strip/replace: 
+    # Stop common injection chars like < > : " / \ | ? *
+    # We allow underscores, hyphens, dots, and any non-control alphanumeric characters (including Chinese).
+    bad_chars = r'[<>:"/\\|?*\x00-\x1f\x7f]'
+    filename = re.sub(bad_chars, "_", filename)
+    
+    # 3. Trim leading/trailing whitespace and dots
+    filename = filename.strip().strip(".")
+    
+    if not filename:
+        return "unnamed_file"
+    
+    return filename
+
+
+# -----------------------------------------------------------------------------
+# Helpers for common route tasks
+# -----------------------------------------------------------------------------
+def handle_glossary_params(form_data, files_data, filename=None):
+    """Common logic for merging glossaries from text, file, and saved json."""
+    glossary_text = form_data.get("glossary_text", "").strip()
+    glossary_use_saved = form_data.get("glossary_use_saved", "1").strip() == "1"
+    glossary_save = form_data.get("glossary_save", "0").strip() == "1"
+    glossary_use_filename = form_data.get("glossary_use_filename", "1").strip() == "1"
+    glossary_save_text = form_data.get("glossary_save_text", "").strip()
+
+    glossary_file = files_data.get("glossary_file")
+    glossary_file_path = None
+    if glossary_file and glossary_file.filename:
+        glossary_name = secure_filename_unicode(glossary_file.filename)
+        glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
+        glossary_file.save(glossary_file_path)
+
+    saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
+    text_glossary = parse_glossary_text(glossary_text)
+    file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
+    merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
+
+    if glossary_save and (text_glossary or file_glossary or glossary_save_text):
+        save_text_glossary = parse_glossary_text(glossary_save_text)
+        updated = merge_glossaries(saved_glossary, save_text_glossary, text_glossary, file_glossary)
+        save_glossary(GLOSSARY_FILE, updated)
+
+    return merged_glossary, glossary_use_filename
+
+
+def build_whisper_prompt(initial_prompt, merged_glossary, filename, glossary_prompt_enabled, use_filename_enabled):
+    """Enhance Whisper prompt with glossary terms and filename-inferred keywords."""
+    prompt = initial_prompt or ""
+    if glossary_prompt_enabled and merged_glossary:
+        prompt_terms = ", ".join(sorted(merged_glossary.keys()))
+        prompt = f"{prompt}\nGlossary terms: {prompt_terms}" if prompt else f"Glossary terms: {prompt_terms}"
+
+    if use_filename_enabled and filename:
+        inferred = infer_glossary_from_filename(filename)
+        if inferred:
+            inferred_terms = ", ".join(sorted(inferred.keys()))
+            prompt = f"{prompt}\nTopic keywords: {inferred_terms}" if prompt else f"Topic keywords: {inferred_terms}"
+    
+    return prompt[:1000] if prompt else None
+
+
+def save_processing_log(log_path, log_data):
+    """Safely save log dictionary to JSON file."""
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            json.dump(log_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Failed to save log: {e}")
+
+
+def to_download_path(file_path):
+    """Convert absolute file path to relative download URL path."""
+    rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
+    return rel_path.replace(os.sep, "/")
+
+
+def build_log_paths(base_name):
+    """Build log file path and corresponding download/preview URLs."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"{base_name}.log.{timestamp}.json"
+    log_path = os.path.join(TRANSCRIPT_FOLDER, log_filename)
+    return log_path, f"/download/{to_download_path(log_path)}", f"/preview/{to_download_path(log_path)}"
+
+
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
@@ -107,7 +204,7 @@ def upload_and_process():
     if not (file and allowed_file(file.filename)):
         return jsonify({"error": "File type not allowed"}), 400
 
-    filename = secure_filename(file.filename)
+    filename = secure_filename_unicode(file.filename)
     save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
     file.save(save_path)
 
@@ -134,12 +231,16 @@ def upload_and_process():
     else:
         whisper_prompt = None
 
-    glossary_text = request.form.get("glossary_text", "").strip()
-    glossary_use_saved = request.form.get("glossary_use_saved", "1").strip() == "1"
-    glossary_save = request.form.get("glossary_save", "0").strip() == "1"
-    glossary_use_filename = request.form.get("glossary_use_filename", "1").strip() == "1"
+    merged_glossary, glossary_use_filename = handle_glossary_params(request.form, request.files, filename)
     glossary_prompt = request.form.get("glossary_prompt", "0").strip() == "1"
-    glossary_save_text = request.form.get("glossary_save_text", "").strip()
+    whisper_prompt = build_whisper_prompt(
+        request.form.get("whisper_prompt", "").strip(), 
+        merged_glossary, 
+        filename, 
+        glossary_prompt, 
+        glossary_use_filename
+    )
+
 
     # AI Enhancement Parameters
     ai_provider = request.form.get("ai_provider", "gemini").strip()
@@ -147,52 +248,6 @@ def upload_and_process():
     ai_api_key = request.form.get("ai_api_key", "").strip()
     ai_enable_expansion = request.form.get("ai_enable_expansion", "0").strip() == "1"
     ai_enable_translation = request.form.get("ai_enable_translation", "0").strip() == "1"
-
-    glossary_file = request.files.get("glossary_file")
-    glossary_file_path = None
-    if glossary_file and glossary_file.filename:
-        glossary_name = secure_filename(glossary_file.filename)
-        glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
-        glossary_file.save(glossary_file_path)
-
-    saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
-    text_glossary = parse_glossary_text(glossary_text)
-    file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
-    merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
-
-    if glossary_save and (text_glossary or file_glossary or glossary_save_text):
-        save_text_glossary = parse_glossary_text(glossary_save_text)
-        updated = merge_glossaries(saved_glossary, save_text_glossary, text_glossary, file_glossary)
-        save_glossary(GLOSSARY_FILE, updated)
-
-    if glossary_prompt and merged_glossary:
-        prompt_terms = ", ".join(sorted(merged_glossary.keys()))
-        if whisper_prompt:
-            whisper_prompt = f"{whisper_prompt}\nGlossary terms: {prompt_terms}"
-        else:
-            whisper_prompt = f"Glossary terms: {prompt_terms}"
-        whisper_prompt = whisper_prompt[:1000]
-
-    if glossary_use_filename:
-        inferred_glossary = infer_glossary_from_filename(filename)
-        if inferred_glossary:
-            inferred_terms = ", ".join(sorted(inferred_glossary.keys()))
-            if whisper_prompt:
-                whisper_prompt = f"{whisper_prompt}\nTopic keywords: {inferred_terms}"
-            else:
-                whisper_prompt = f"Topic keywords: {inferred_terms}"
-            whisper_prompt = whisper_prompt[:1000]
-
-
-    def to_download_path(file_path):
-        rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
-        return rel_path.replace(os.sep, "/")
-
-    def build_log_paths(base_name):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"{base_name}.log.{timestamp}.json"
-        log_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], log_filename)
-        return log_path, f"/download/{to_download_path(log_path)}", f"/preview/{to_download_path(log_path)}"
 
     def generate():
         try:
@@ -268,11 +323,7 @@ def upload_and_process():
                     log_data["status"] = "completed"
                     log_data["duration_sec"] = round(time.time() - start_ts, 3)
                     log_data["end_time"] = datetime.now().isoformat()
-                    try:
-                        with open(log_path, "w", encoding="utf-8") as f:
-                            json.dump(log_data, f, ensure_ascii=False, indent=2)
-                    except Exception:
-                        pass
+                    save_processing_log(log_path, log_data)
 
                     q.put({
                         "type": "result",
@@ -284,11 +335,7 @@ def upload_and_process():
                     log_data["error"] = str(e)
                     log_data["duration_sec"] = round(time.time() - start_ts, 3)
                     log_data["end_time"] = datetime.now().isoformat()
-                    try:
-                        with open(log_path, "w", encoding="utf-8") as f:
-                            json.dump(log_data, f, ensure_ascii=False, indent=2)
-                    except Exception:
-                        pass
+                    save_processing_log(log_path, log_data)
                     q.put({
                         "type": "error",
                         "message": str(e),
@@ -340,7 +387,7 @@ def upload_srt_and_translate():
     if not file.filename.lower().endswith(".srt"):
         return jsonify({"error": "File type not allowed"}), 400
 
-    filename = secure_filename(file.filename)
+    filename = secure_filename_unicode(file.filename)
     base_name = os.path.splitext(filename)[0]
     save_name = f"{base_name}.uploaded.srt"
     save_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], save_name)
@@ -356,36 +403,7 @@ def upload_srt_and_translate():
     elif not target_lang or target_lang == "none":
         target_lang = None
 
-    glossary_text = request.form.get("glossary_text", "").strip()
-    glossary_use_saved = request.form.get("glossary_use_saved", "1").strip() == "1"
-    glossary_save = request.form.get("glossary_save", "0").strip() == "1"
-    glossary_use_filename = request.form.get("glossary_use_filename", "1").strip() == "1"
-
-    glossary_file = request.files.get("glossary_file")
-    glossary_file_path = None
-    if glossary_file and glossary_file.filename:
-        glossary_name = secure_filename(glossary_file.filename)
-        glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
-        glossary_file.save(glossary_file_path)
-
-    saved_glossary = load_glossary(GLOSSARY_FILE) if glossary_use_saved else {}
-    text_glossary = parse_glossary_text(glossary_text)
-    file_glossary = parse_glossary_file(glossary_file_path) if glossary_file_path else {}
-    merged_glossary = merge_glossaries(text_glossary, file_glossary, saved_glossary)
-
-    if glossary_save and (text_glossary or file_glossary):
-        updated = merge_glossaries(saved_glossary, text_glossary, file_glossary)
-        save_glossary(GLOSSARY_FILE, updated)
-
-    def to_download_path(file_path):
-        rel_path = os.path.relpath(file_path, TRANSCRIPT_FOLDER)
-        return rel_path.replace(os.sep, "/")
-
-    def build_log_paths(base_name):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"{base_name}.log.{timestamp}.json"
-        log_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], log_filename)
-        return log_path, f"/download/{to_download_path(log_path)}", f"/preview/{to_download_path(log_path)}"
+    merged_glossary, _ = handle_glossary_params(request.form, request.files, filename)
 
     def generate():
         try:
@@ -457,11 +475,7 @@ def upload_srt_and_translate():
                     log_data["status"] = "completed"
                     log_data["duration_sec"] = round(time.time() - start_ts, 3)
                     log_data["end_time"] = datetime.now().isoformat()
-                    try:
-                        with open(log_path, "w", encoding="utf-8") as f:
-                            json.dump(log_data, f, ensure_ascii=False, indent=2)
-                    except Exception:
-                        pass
+                    save_processing_log(log_path, log_data)
 
                     q.put({
                         "type": "result",
@@ -473,11 +487,7 @@ def upload_srt_and_translate():
                     log_data["error"] = str(e)
                     log_data["duration_sec"] = round(time.time() - start_ts, 3)
                     log_data["end_time"] = datetime.now().isoformat()
-                    try:
-                        with open(log_path, "w", encoding="utf-8") as f:
-                            json.dump(log_data, f, ensure_ascii=False, indent=2)
-                    except Exception:
-                        pass
+                    save_processing_log(log_path, log_data)
                     q.put({
                         "type": "error",
                         "message": str(e),
@@ -541,7 +551,7 @@ def save_glossary_now():
 
     glossary_file_path = None
     if glossary_file and glossary_file.filename:
-        glossary_name = secure_filename(glossary_file.filename)
+        glossary_name = secure_filename_unicode(glossary_file.filename)
         glossary_file_path = os.path.join(app.config["TRANSCRIPT_FOLDER"], f"glossary_{glossary_name}")
         glossary_file.save(glossary_file_path)
 
