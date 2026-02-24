@@ -44,7 +44,10 @@
 
 - **Python 3.8+**
 - **FFmpeg**：需安装并加入系统 PATH
-- **CUDA（可选）**：NVIDIA GPU 可加速 Whisper
+  - **Linux (Debian/Ubuntu)**：`sudo apt update && sudo apt install -y ffmpeg`
+  - **macOS (Homebrew)**：`brew install ffmpeg`
+  - **Windows**：[官方下载](https://ffmpeg.org/download.html)并手动加入 PATH。
+- **CUDA（可选）**：NVIDIA GPU 可加速 Whisper 转写。
 - **上传大小限制**：默认 **5 GB**（可在 `src/config.py` 调整）
 
 ### 安装与运行

@@ -1,3 +1,4 @@
+# System Dependency: FFmpeg must be installed separately (e.g. sudo apt install ffmpeg)
 flask
 python-dotenv
 torch

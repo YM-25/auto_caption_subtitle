@@ -43,7 +43,10 @@
 
 ### Prerequisites
 - **Python 3.8+**
-- **FFmpeg**: Must be installed and added to your system PATH.
+- **FFmpeg**: Must be installed and added to your system PATH. 
+  - **Linux (Debian/Ubuntu)**: `sudo apt update && sudo apt install -y ffmpeg`
+  - **macOS (Homebrew)**: `brew install ffmpeg`
+  - **Windows**: [Download](https://ffmpeg.org/download.html) and add to PATH.
 - **CUDA (Optional)**: Recommended for faster Whisper transcription (NVIDIA GPU).
 - **Upload size limit**: Default max upload is **5 GB** (configurable in `src/config.py`).
 

@@ -5,8 +5,21 @@ Dependency check runs only when starting the server (python app.py).
 Configuration is centralized in src.config. Optional .env is loaded if present.
 """
 
+import sys
 import os
+
+# 1. Run absolute first: ensure all required packages from requirements.txt are installed
+if __name__ == "__main__":
+    # Add project root to sys.path to ensure src imports work during dependency check if needed
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from src.dependency_manager import check_and_install_dependencies
+        check_and_install_dependencies()
+    except Exception as e:
+        print(f"Error during dependency check: {e}")
+
 import re
+
 
 # Load .env from project root so FLASK_SECRET_KEY, WHISPER_MODEL, etc. apply
 try:
@@ -613,11 +626,9 @@ def clear_history():
 
 
 # -----------------------------------------------------------------------------
-# Entry point: run dependency check once, then start server
+# Entry point: run server
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    from src.dependency_manager import check_and_install_dependencies
-    check_and_install_dependencies()
 
     debug = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "yes")
     port = int(os.environ.get("PORT", "5000"))
