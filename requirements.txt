@@ -1,0 +1,9 @@
+flask
+python-dotenv
+torch
+openai-whisper
+ffmpeg-python
+deep-translator
+google-generativeai
+openai
+opencc-python-reimplemented

@@ -36,3 +36,4 @@ outputs/
 *.wav
 *.srt
 *.txt
+!requirements.txt
